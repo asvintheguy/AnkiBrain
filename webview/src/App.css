@@ -1,14 +1,7 @@
 @import './variables.css';
 
-
 .App {
     text-align: center;
-}
-
-.SideBar {
-    background-color: var(--color-black);
-    border-bottom-right-radius: 15px;
-    border-top-right-radius: 15px;
 }
 
 .cs-main-container {
@@ -28,10 +21,6 @@
     color: var(--color-accent) !important;
 }
 
-/*.btn:hover {*/
-/*    opacity: 0.5 !important;*/
-/*}*/
-
-/*.btn:active {*/
-/*    opacity: 0.25 !important;*/
-/*}*/
+.MainAppArea {
+    padding: 20px;
+}
