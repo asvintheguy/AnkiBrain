@@ -4,7 +4,7 @@ export const appSettings = createSlice({
   name: "appSettings",
   initialState: {
     ai: {
-      llmModel: "gpt-3.5-turbo",
+      llmModel: "gpt-5.6-terra",
       temperature: 0,
     },
   },
