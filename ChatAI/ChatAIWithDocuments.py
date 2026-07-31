@@ -1,7 +1,7 @@
 import json
 import os
 from os import path
-from typing import Tuple, List
+from typing import Optional, Tuple, List
 
 from langchain.chains import ConversationalRetrievalChain
 from langchain.chat_models import ChatOpenAI
@@ -18,6 +18,13 @@ from ChatInterface import ChatInterface
 
 def get_file_extension(file_name: str) -> str:
     return path.splitext(file_name)[1]
+
+
+def get_card_gen_chunk_size(model_name: str) -> int:
+    if model_name and model_name.startswith('gpt-5.6'):
+        return 6000
+
+    return 3000
 
 
 def rewrite_json_file(new_data: dict, f):
@@ -59,7 +66,7 @@ class ChatAIWithDocuments(ChatInterface):
         self.text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=100, length_function=len)
 
         temperature = 0
-        model_name = 'gpt-5.6-terra'
+        model_name = 'gpt-5.6-luna'
         with open(settings_path, 'r') as f:
             data = json.load(f)
             temperature = data['temperature']
@@ -126,31 +133,36 @@ class ChatAIWithDocuments(ChatInterface):
         self.vectorstore.add_documents(documents)
         self.vectorstore.persist()
 
-    def split_document(self, docpath: str):
+    def split_document(self, docpath: str, chunk_size: Optional[int] = None):
         # Set up the loader based on file type.
         ext = get_file_extension(docpath)
         loader = None
         documents: List[Document] = []
+        text_splitter = self.text_splitter
+        if chunk_size is not None:
+            text_splitter = RecursiveCharacterTextSplitter(chunk_size=chunk_size, chunk_overlap=0,
+                                                           length_function=len)
+
         if ext == '.txt':
             loader = TextLoader(docpath, encoding='utf-8')
             documents = loader.load()
-            documents = self.text_splitter.split_documents(documents)
+            documents = text_splitter.split_documents(documents)
         elif ext == '.pdf':
             loader = PyPDFLoader(docpath)
             documents = loader.load()
-            documents = self.text_splitter.split_documents(documents)
+            documents = text_splitter.split_documents(documents)
         elif ext == '.docx':
             loader = Docx2txtLoader(docpath)
             documents = loader.load()
-            documents = self.text_splitter.split_documents(documents)
+            documents = text_splitter.split_documents(documents)
         elif ext == '.pptx':
             loader = UnstructuredPowerPointLoader(docpath)
             documents = loader.load()
-            documents = self.text_splitter.split_documents(documents)
+            documents = text_splitter.split_documents(documents)
         elif ext == '.html':
             loader = UnstructuredHTMLLoader(docpath)
             documents = loader.load()
-            documents = self.text_splitter.split_documents(documents)
+            documents = text_splitter.split_documents(documents)
         else:
             raise Exception(
                 'Document type not supported at this time.\n'

@@ -11,7 +11,7 @@ dotenv_path = path.join(user_data_dir, '.env')
 import json
 from dotenv import load_dotenv
 
-from ChatAIWithDocuments import ChatAIWithDocuments
+from ChatAIWithDocuments import ChatAIWithDocuments, settings_path, get_card_gen_chunk_size
 from ChatAIWithoutDocuments import ChatAIWithoutDocuments
 from InterprocessCommand import InterprocessCommand as IC
 from langchain.callbacks import get_openai_callback
@@ -138,7 +138,13 @@ def handle_module_input(data: dict[str, Any]):
         module_return(IC.DID_DELETE_ALL_DOCUMENTS)
 
     elif cmd == IC.SPLIT_DOCUMENT:
-        document_chunks = withDocumentsAI.split_document(data['path'])
+        model_name = 'gpt-5.6-luna'
+        with open(settings_path, 'r') as f:
+            model_name = json.load(f).get('llmModel', model_name)
+        document_chunks = withDocumentsAI.split_document(
+            data['path'],
+            chunk_size=get_card_gen_chunk_size(model_name)
+        )
         chunks = [chunk.page_content for chunk in document_chunks]
         module_return(IC.DID_SPLIT_DOCUMENT, {'chunks': json.dumps(chunks)})
 

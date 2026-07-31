@@ -89,7 +89,7 @@ export function SideBar(props) {
               <Text fontSize={12}>
                 AnkiBrain Server Mode uses "pay as you go" pricing and aims to
                 keep AnkiBrain as cheap as possible to make it accessible to all
-                users across the world. Using GPT 3.5 Turbo (default) is very
+                users across the world. Using GPT 5.6 Luna (default) is very
                 cost-effective, and it is recommended for most users and most
                 usage scenarios.
               </Text>
