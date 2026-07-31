@@ -1,5 +1,7 @@
 # Changelog
 
+# 1.0.0
+
 # 0.7.4
 - Bugfix for importing AnkiBrain module
 - Remove free credits request button (users now automatically get free credits upon signup)
