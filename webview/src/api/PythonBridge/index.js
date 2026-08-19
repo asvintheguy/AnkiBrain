@@ -15,6 +15,7 @@ import { stopAllLoaders } from "../redux/stopAllLoaders";
 import { setCurrentVersion } from "../redux/slices/currentVersion";
 import { setLifetimeCost, setSessionCost } from "../redux/slices/cost";
 import { setLLMModel, setTemperature } from "../redux/slices/appSettings";
+import { setLLMModel as persistLLMModel } from "../settings";
 import { setLoadingText } from "../redux/slices/loadingText";
 import { setUserMode } from "../redux/slices/userMode";
 import { getUser } from "../server-api/networking/user";
@@ -172,7 +173,11 @@ export async function handlePythonDataReceived(
         dispatch(setDocuments(documents_saved));
       }
       if (llmModel) {
-        dispatch(setLLMModel(llmModel));
+        if (llmModel === "gpt-3.5-turbo" || llmModel === "gpt-4") {
+          await persistLLMModel("gpt-5.6-luna", dispatch);
+        } else {
+          dispatch(setLLMModel(llmModel));
+        }
       }
       if (temperature) {
         dispatch(setTemperature(temperature));

@@ -1,7 +1,9 @@
 # Changelog
 
-# 1.0.0
+# 1.0.0 - August 19, 2026
 - Upgrade available models to GPT 5.6 (Luna, Terra, Sol)
+- GPT 5.6 Luna is now the default model, users on GPT 3.5 Turbo or GPT 4 will automatically be switched
+- GPT 3.5 Turbo and GPT 4 are deprecated and will stop working in October 2026
 - Move sidebar to bottom navigation bar to save screen space
 
 # 0.7.4
