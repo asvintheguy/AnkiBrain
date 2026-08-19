@@ -1,5 +1,9 @@
 # Changelog
 
+# 1.0.0
+- Upgrade available models to GPT 5.6 (Luna, Terra, Sol)
+- Move sidebar to bottom navigation bar to save screen space
+
 # 0.7.4
 - Bugfix for importing AnkiBrain module
 - Remove free credits request button (users now automatically get free credits upon signup)

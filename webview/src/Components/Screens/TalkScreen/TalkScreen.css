@@ -15,8 +15,8 @@
     flex-direction: row;
     align-items: center;
     justify-content: center;
-    word-break: break-all;
-    max-width: 55%;
+    word-break: break-word;
+    max-width: 65%;
 }
 
 .ShareButton:hover {

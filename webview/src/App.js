@@ -9,6 +9,7 @@ import { CardMakingScreen } from "./Components/Screens/CardMakingScreen/CardMaki
 import { TalkScreen } from "./Components/Screens/TalkScreen/TalkScreen";
 import { LoginModal } from "./Components/modals/LoginModal";
 import { SideBar } from "./Components/SideBar/SideBar";
+import { BottomNav } from "./Components/BottomNav/BottomNav";
 import { TopicExplanationScreen } from "./Components/Screens/TopicExplanationScreen/TopicExplanationScreen";
 import { PATHS } from "./api/constants";
 import { useDispatch, useSelector } from "react-redux";
@@ -62,7 +63,7 @@ function App() {
               colorMode: "dark",
               currentVersion: "0.6.2",
               documents_saved: [],
-              llmModel: "gpt-3.5-turbo",
+              llmModel: "gpt-5.6-luna",
               temperature: 0,
               user_mode: "SERVER",
               user: null,
@@ -168,63 +169,56 @@ function App() {
       <ColorModeScript initialColorMode={"dark"} />
       <ChakraProvider theme={theme}>
         <div
-          className="App container-fluid pt-3"
+          className="App"
           style={{
             height: "100vh",
+            display: "flex",
+            flexDirection: "column",
           }}
         >
-          <div
-            className={"row d-flex flex-row"}
-            style={{ height: "100%", flexWrap: "nowrap", overflowX: "auto" }}
-          >
-            {showLoginModal && <LoginModal isOpen={showLoginModal} />}
+          {showLoginModal && <LoginModal isOpen={showLoginModal} />}
 
-            {globalLoading && <GlobalLoadingIndicator />}
-            <AppAlertModal />
-            <BootReminderModal
-              show={showBootReminderModalNow}
-              onClose={() => {
-                setShowBootReminderModalNow(false);
-              }}
-            />
-            <EmailVerificationModal />
+          {globalLoading && <GlobalLoadingIndicator />}
+          <AppAlertModal />
+          <BootReminderModal
+            show={showBootReminderModalNow}
+            onClose={() => {
+              setShowBootReminderModalNow(false);
+            }}
+          />
+          <EmailVerificationModal />
 
-            {!globalLoading && (
-              <>
-                <SideBar
-                  loggedIn={loggedIn}
-                  style={{
-                    width: "155px",
-                    height: "600px",
-                  }}
-                />
+          {!globalLoading && (
+            <>
+              <SideBar />
 
-                <div
-                  className={"MainAppArea"}
-                  style={{
-                    flex: 1,
-                    height: "100%",
-                    width: "100%",
-                    opacity: globalLoading ? 0.1 : 1,
-                  }}
-                >
-                  <Routes>
-                    <Route
-                      path={PATHS.TOPIC_EXPLANATION}
-                      element={<TopicExplanationScreen />}
-                    />
-                    <Route
-                      path={PATHS.MAKE_CARDS}
-                      element={<CardMakingScreen />}
-                    />
-                    <Route path={PATHS.TALK} element={<TalkScreen />} />
-                    <Route path={PATHS.IMPORT} element={<ImportScreen />} />
-                    <Route path={PATHS.SETTINGS} element={<SettingsScreen />} />
-                  </Routes>
-                </div>
-              </>
-            )}
-          </div>
+              <div
+                className={"MainAppArea"}
+                style={{
+                  flex: 1,
+                  width: "100%",
+                  overflow: "auto",
+                  opacity: globalLoading ? 0.1 : 1,
+                }}
+              >
+                <Routes>
+                  <Route
+                    path={PATHS.TOPIC_EXPLANATION}
+                    element={<TopicExplanationScreen />}
+                  />
+                  <Route
+                    path={PATHS.MAKE_CARDS}
+                    element={<CardMakingScreen />}
+                  />
+                  <Route path={PATHS.TALK} element={<TalkScreen />} />
+                  <Route path={PATHS.IMPORT} element={<ImportScreen />} />
+                  <Route path={PATHS.SETTINGS} element={<SettingsScreen />} />
+                </Routes>
+              </div>
+
+              <BottomNav />
+            </>
+          )}
         </div>
       </ChakraProvider>
     </>

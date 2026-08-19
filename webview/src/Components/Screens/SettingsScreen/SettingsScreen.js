@@ -78,8 +78,11 @@ const AdvancedSettings = (props) => {
               }
             }}
           >
-            <option value={"gpt-3.5-turbo"}>gpt-3.5-turbo (default)</option>
-            <option value={"gpt-4"}>gpt-4 (expensive)</option>
+            <option value={"gpt-3.5-turbo"}>gpt-3.5-turbo (legacy - will stop working October 2026)</option>
+            <option value={"gpt-4"}>gpt-4 (expensive) (legacy - will stop working October 2026)</option>
+            <option value={"gpt-5.6-sol"}>GPT-5.6 Sol (very expensive)</option>
+            <option value={"gpt-5.6-terra"}>GPT-5.6 Terra (expensive)</option>
+            <option value={"gpt-5.6-luna"}>GPT-5.6 Luna (best value)</option>
           </Select>
           <Input
             value={temperature}
@@ -330,7 +333,7 @@ export const SettingsScreen = (props) => {
                       justifyContent: "center",
                       alignItems: "center",
                     }}
-                    href={"https://donate.stripe.com/7sI16Z1jYdo698I9AC"}
+                    href={"https://donate.stripe.com/8x25kx8ZM7dx66RcMa7N600"}
                   >
                     <BiDonateHeart size={30} style={{ marginRight: 5 }} />
                     Donate

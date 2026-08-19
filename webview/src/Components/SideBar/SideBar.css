@@ -1,43 +1,266 @@
-.SideBar > .container {
-    color: white;
-    font-size: 24px;
+.TopHeader {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  height: 48px;
+  padding: 0 16px;
+  background-color: var(--color-black);
+  color: white;
+  flex-shrink: 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  gap: 12px;
 }
 
-.SideBarButton {
-    border-radius: 5px;
-    padding: 3px;
-    display: flex;
-    flex-direction: row;
-    align-items: center;
-    margin-bottom: 10px;
+.TopHeader-left {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
 }
 
-.SideBar span {
-    cursor: default;
-    font-size: 12px;
-    white-space: nowrap;
+.TopHeader-brand {
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
 }
 
-.SideBarButton:hover {
-    background-color: gray;
+.TopHeader-meta {
+  font-size: 11px;
+  opacity: 0.55;
+  white-space: nowrap;
 }
 
-.SideBarButton:active {
-    opacity: 0.5;
+.TopHeader-language {
+  font-size: 10px;
+  padding: 2px 7px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 4px;
+  white-space: nowrap;
 }
 
-.AccountInfoContainer {
+.TopHeader-colorToggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  color: rgba(255, 255, 255, 0.6);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  transition: color 0.15s, background-color 0.15s;
+}
+
+.TopHeader-colorToggle:hover {
+  color: rgba(255, 255, 255, 0.9);
+  background-color: rgba(255, 255, 255, 0.08);
+}
+
+.TopHeader-right {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  flex-shrink: 0;
+}
+
+.TopHeader-userInfo {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  opacity: 0.8;
+  min-width: 0;
+}
+
+.TopHeader-userEmail {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 140px;
+}
+
+.TopHeader-userBalance {
+  white-space: nowrap;
+  font-weight: 500;
+}
+
+.TopHeader-userStorage {
+  white-space: nowrap;
+  opacity: 0.6;
+}
+
+.TopHeader-loginBtn {
+  background: var(--color-accent);
+  color: var(--color-black);
+  border: none;
+  padding: 4px 14px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+
+.TopHeader-loginBtn:hover {
+  opacity: 0.8;
+}
+
+.TopHeader-actionBtn {
+  background: rgba(255, 255, 255, 0.1);
+  color: white;
+  border: none;
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-size: 11px;
+  cursor: pointer;
+  text-decoration: none;
+  transition: background-color 0.15s;
+  white-space: nowrap;
+}
+
+.TopHeader-actionBtn:hover {
+  background: rgba(255, 255, 255, 0.18);
+  text-decoration: none;
+  color: white;
+}
+
+.TopHeader-addBalanceBtn {
+  background: var(--color-accent);
+  color: var(--color-black);
+  border: none;
+  padding: 6px 16px;
+  border-radius: 4px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: opacity 0.15s;
+}
+
+.TopHeader-addBalanceBtn:hover {
+  opacity: 0.8;
+  color: var(--color-black);
+}
+
+.TopHeader-cost {
+  font-size: 11px;
+  opacity: 0.7;
+  white-space: nowrap;
+}
+
+.TopHeader-profile {
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  font-size: 20px;
+  color: rgba(255, 255, 255, 0.6);
+  transition: color 0.15s;
+}
+
+.TopHeader-profile:hover {
+  color: rgba(255, 255, 255, 0.9);
+}
+
+@media (min-width: 2000px) {
+  .TopHeader {
+    height: 60px;
+    padding: 0 24px;
+    gap: 16px;
+  }
+
+  .TopHeader-brand {
+    font-size: 18px;
+  }
+
+  .TopHeader-meta {
     font-size: 14px;
+  }
+
+  .TopHeader-language {
+    font-size: 13px;
+    padding: 3px 10px;
+  }
+
+  .TopHeader-colorToggle {
+    padding: 6px;
+  }
+
+  .TopHeader-userInfo {
+    font-size: 14px;
+    gap: 12px;
+  }
+
+  .TopHeader-userEmail {
+    max-width: 200px;
+  }
+
+  .TopHeader-loginBtn {
+    font-size: 15px;
+    padding: 6px 20px;
+  }
+
+  .TopHeader-actionBtn {
+    font-size: 14px;
+    padding: 6px 14px;
+  }
+
+  .TopHeader-addBalanceBtn {
+    font-size: 15px;
+    padding: 8px 22px;
+  }
+
+  .TopHeader-cost {
+    font-size: 14px;
+  }
+
+  .TopHeader-profile {
+    font-size: 24px;
+  }
 }
 
-/*#LoginButton {*/
-/*    background-color: var(--color-secondary) !important;*/
-/*}*/
+@media (min-width: 3000px) {
+  .TopHeader {
+    height: 72px;
+    padding: 0 32px;
+  }
 
-#ProfileButton:hover {
-    opacity: 0.5;
-}
+  .TopHeader-brand {
+    font-size: 22px;
+  }
 
-#ProfileButton:active {
-    opacity: 0.25;
+  .TopHeader-meta {
+    font-size: 17px;
+  }
+
+  .TopHeader-language {
+    font-size: 16px;
+  }
+
+  .TopHeader-userInfo {
+    font-size: 17px;
+  }
+
+  .TopHeader-loginBtn {
+    font-size: 18px;
+    padding: 8px 24px;
+  }
+
+  .TopHeader-actionBtn {
+    font-size: 17px;
+    padding: 8px 18px;
+  }
+
+  .TopHeader-addBalanceBtn {
+    font-size: 18px;
+    padding: 10px 26px;
+  }
+
+  .TopHeader-profile {
+    font-size: 28px;
+  }
 }

@@ -43,7 +43,7 @@ default_settings = {
     "documents_saved": [],  # local mode only, server mode uses user.documentsSaved
     "lifetime_total_cost": 0,
     "user_mode": None,
-    "llmModel": 'gpt-3.5-turbo',
+    "llmModel": 'gpt-5.6-luna',
     'temperature': 0,
     'user': None,
     'devMode': False,
