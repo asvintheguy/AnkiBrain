@@ -63,7 +63,7 @@ function App() {
               colorMode: "dark",
               currentVersion: "0.6.2",
               documents_saved: [],
-              llmModel: "gpt-3.5-turbo",
+              llmModel: "gpt-5.6-luna",
               temperature: 0,
               user_mode: "SERVER",
               user: null,

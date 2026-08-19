@@ -59,9 +59,13 @@ export function SideBar(props) {
               alignSelf={"center"}
               direction={"column"}
             >
-              <Text fontSize={18} fontWeight={"bold"}>Pricing Information</Text>
+              <Heading fontSize={18}>Pricing Information</Heading>
               <Text fontSize={12}>
-                AnkiBrain Server Mode uses "pay as you go" pricing.
+                AnkiBrain Server Mode uses "pay as you go" pricing and aims to
+                keep AnkiBrain as cheap as possible to make it accessible to all
+                users across the world. Using GPT 5.6 Luna (default) is very
+                cost-effective, and it is recommended for most users and most
+                usage scenarios.
               </Text>
               <Text fontSize={12}>
                 GPT 3.5 Turbo can generate <b>1000 flashcards</b> for about <b>$0.39</b>.

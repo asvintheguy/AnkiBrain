@@ -59,6 +59,10 @@ import { splitDocument } from "../../../api/documents";
 import { isLocalMode } from "../../../api/user";
 import { pyEditSetting } from "../../../api/PythonBridge/senders/pyEditSetting";
 import { store } from "../../../api/redux";
+import {
+  batchChunks,
+  getCardGenChunkSize,
+} from "../../../api/batching";
 import { CustomPromptMakeCardsModal } from "./CustomPromptMakeCardsModal";
 
 function ClearCardsAlert(props) {
@@ -353,16 +357,20 @@ export function CardMakingScreen() {
         chunks = JSON.parse(chunks);
       }
 
+      const model = store.getState().appSettings.ai.llmModel;
+      const maxCharsPerBatch = getCardGenChunkSize(model);
+      const batches = batchChunks(chunks, maxCharsPerBatch);
+
       dispatch(setMakeCardsLoading(false));
       successToast(
         "Processed Document",
         `Your document has been processed, 
-                        now starting card generation for ${chunks.length} chunks of text.`
+                        now starting card generation for ${batches.length} sections of text.`
       );
 
       makeCardsFromDocStartTimeRef.current = Date.now();
       let finishedEntireDocument = true;
-      for (let i = 0; i < chunks.length; i++) {
+      for (let i = 0; i < batches.length; i++) {
         try {
           if (terminateMakingCardsFromDoc.current === true) {
             terminateMakingCardsFromDoc.current = false;
@@ -370,12 +378,10 @@ export function CardMakingScreen() {
             break;
           }
 
-          let chunk = chunks[i];
-
           // In local mode, the chatAI just returns the text as the chunk itself
           // i.e. chunks: [str]
-          let text = chunk;
-          let progress = (i / (chunks.length - 1)) * 100;
+          let text = batches[i];
+          let progress = (i / (batches.length - 1)) * 100;
           setMakeCardsFromDocProgress(progress.toFixed(2));
           await generateCards(
             text,
@@ -390,7 +396,7 @@ export function CardMakingScreen() {
             const elapsedTime =
               (Date.now() - makeCardsFromDocStartTimeRef.current) / 1000; // convert ms -> s
             const averageTimePerIteration = elapsedTime / i;
-            const predictedTotalTime = averageTimePerIteration * chunks.length;
+            const predictedTotalTime = averageTimePerIteration * batches.length;
             const eta = predictedTotalTime - elapsedTime;
             setEta(eta);
           }

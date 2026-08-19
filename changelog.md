@@ -1,6 +1,7 @@
 # Changelog
 
 # 1.0.0
+- Upgrade available models to GPT 5.6 (Luna, Terra, Sol)
 
 # 0.7.4
 - Bugfix for importing AnkiBrain module
