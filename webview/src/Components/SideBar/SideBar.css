@@ -129,6 +129,24 @@
   color: white;
 }
 
+.TopHeader-addBalanceBtn {
+  background: var(--color-accent);
+  color: var(--color-black);
+  border: none;
+  padding: 6px 16px;
+  border-radius: 4px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: opacity 0.15s;
+}
+
+.TopHeader-addBalanceBtn:hover {
+  opacity: 0.8;
+  color: var(--color-black);
+}
+
 .TopHeader-cost {
   font-size: 11px;
   opacity: 0.7;
@@ -191,6 +209,11 @@
     padding: 6px 14px;
   }
 
+  .TopHeader-addBalanceBtn {
+    font-size: 15px;
+    padding: 8px 22px;
+  }
+
   .TopHeader-cost {
     font-size: 14px;
   }
@@ -230,6 +253,11 @@
   .TopHeader-actionBtn {
     font-size: 17px;
     padding: 8px 18px;
+  }
+
+  .TopHeader-addBalanceBtn {
+    font-size: 18px;
+    padding: 10px 26px;
   }
 
   .TopHeader-profile {

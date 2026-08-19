@@ -52,7 +52,7 @@ export function BootReminderModal(props) {
                   justifyContent: "center",
                   alignItems: "center",
                 }}
-                href={"https://donate.stripe.com/7sI16Z1jYdo698I9AC"}
+                href={"https://donate.stripe.com/8x25kx8ZM7dx66RcMa7N600"}
               >
                 <BiDonateHeart size={30} style={{ marginRight: 5 }} />
                 Donate

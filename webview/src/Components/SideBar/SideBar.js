@@ -7,6 +7,7 @@ import { setShowLoginModal, store, updateUser } from "../../api/redux";
 import {
   Button,
   Flex,
+  Heading,
   Text,
   useColorMode,
 } from "@chakra-ui/react";
@@ -68,14 +69,15 @@ export function SideBar(props) {
                 usage scenarios.
               </Text>
               <Text fontSize={12}>
-                GPT 3.5 Turbo can generate <b>1000 flashcards</b> for about <b>$0.39</b>.
-                GPT 4 costs about $0.015 per flashcard.
-              </Text>
-              <Text fontSize={12}>
-                $1.00 embeds <b>3,000 pages</b> of documents.
+                GPT 5.6 Luna (default) can generate <b>100 flashcards</b> for
+                about <b>$0.03</b> on average.
               </Text>
               <Text fontSize={12}>
                 $1.00 stores <b>2,850 pages</b> for one month.
+              </Text>
+              <Text fontSize={10} color={"gray"}>
+                Storage only applies to documents imported via the Import tab,
+                not to flashcards created in the Make Cards tab.
               </Text>
               <Text fontSize={10} color={"gray"}>
                 Files stored in a vector database. See{" "}
@@ -162,7 +164,7 @@ export function SideBar(props) {
               <span className="TopHeader-userStorage">S: ${user.monthlyStorageCharge.toFixed(2)}</span>
             </div>
             <button
-              className="TopHeader-actionBtn"
+              className="TopHeader-addBalanceBtn"
               onClick={async () => {
                 try {
                   if (store.getState().lockCheckoutSession.value) {
@@ -175,7 +177,7 @@ export function SideBar(props) {
                 }
               }}
             >
-              Add
+              Add Balance
             </button>
             <div className="TopHeader-profile" id="ProfileDropdown">
               <i
@@ -212,7 +214,7 @@ export function SideBar(props) {
         {isLocalMode() && (
           <a
             className="TopHeader-actionBtn"
-            href={"https://donate.stripe.com/7sI16Z1jYdo698I9AC"}
+            href={"https://donate.stripe.com/8x25kx8ZM7dx66RcMa7N600"}
           >
             Donate
           </a>
