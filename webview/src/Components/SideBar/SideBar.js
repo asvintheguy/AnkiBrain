@@ -222,7 +222,7 @@ export function SideBar(props) {
         <Box mt={5}>
           <h5>AnkiBrain</h5>
           <Text fontSize={12} m={0} p={0}>
-            Version {currentVersion} {currentVersion < "1" ? "Beta" : ""}
+            Version {currentVersion}
           </Text>
           {process.env.REACT_APP_ENV === "DEV" && (
             <Text fontSize={12} m={0} p={0}>
