@@ -60,7 +60,7 @@ def load_config(config_path=CONFIG_PATH, *, allow_legacy=False):
         raise ValueError('AI configuration and providers must be JSON objects.')
     if saved.get('provider') in ('codex', 'claude'):
         if not allow_legacy:
-            raise ValueError('CLI providers were removed. Open AI Provider Settings, choose a provider, sign in, and Save.')
+            raise ValueError('CLI providers were removed. Open AnkiBrain → Connect AI, choose a provider, sign in, and Save.')
         if saved['provider'] == 'codex' and 'chatgpt' not in saved.get('providers', {}):
             old = saved.get('providers', {}).get('codex', {})
             if not isinstance(old, dict):
@@ -261,6 +261,8 @@ def run_provider(prompt, stop=None, config=None):
         raise RuntimeError('AI provider returned no text.')
     for sequence in stop or []:
         response = response.split(sequence, 1)[0]
+    if not response.strip():
+        raise RuntimeError('AI response was empty after applying stop sequences. Retry or choose another model.')
     return response.strip()
 
 

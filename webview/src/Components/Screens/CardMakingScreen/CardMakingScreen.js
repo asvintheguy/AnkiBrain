@@ -56,7 +56,6 @@ import {
 } from "../../../api/redux/slices/makeCardsText";
 import { errorToast, infoToast, successToast } from "../../../api/toast";
 import { splitDocument } from "../../../api/documents";
-import { isLocalMode } from "../../../api/user";
 import { pyEditSetting } from "../../../api/PythonBridge/senders/pyEditSetting";
 import { store } from "../../../api/redux";
 import {
@@ -344,7 +343,6 @@ export function CardMakingScreen() {
       return;
     }
 
-    // Same implementation for local/server modes.
     try {
       dispatch(setMakeCardsLoading(true));
       let chunks = await splitDocument(dispatch);
@@ -378,7 +376,7 @@ export function CardMakingScreen() {
             break;
           }
 
-          // In local mode, the chatAI just returns the text as the chunk itself
+          // The study engine returns each text chunk directly.
           // i.e. chunks: [str]
           let text = batches[i];
           let progress = (i / (batches.length - 1)) * 100;
@@ -450,8 +448,7 @@ export function CardMakingScreen() {
               </AlertDialogHeader>
               <AlertDialogBody>
                 <Text>
-                  AnkiBrain can make cards out of an entire document up to{" "}
-                  {isLocalMode() ? "1 GB" : "100 MB"} in size.
+                  AnkiBrain can make cards out of an entire document up to 1 GB in size.
                 </Text>
                 <Text>
                   AnkiBrain will read <b>every single word</b> in your document,
@@ -623,7 +620,7 @@ export function CardMakingScreen() {
 
               <Flex direction={"column"} p={0} m={0}>
                 <Text fontSize={10} color={"gray"} p={0} m={0}>
-                  Max {isLocalMode() ? "1 GB" : "100 MB"} per file.{" "}
+                  Max 1 GB per file.
                 </Text>
                 {automaticallyAddCards && (
                   <Text fontSize={10} color={"gray"} p={0} m={0}>

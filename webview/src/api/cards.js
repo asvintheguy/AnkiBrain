@@ -1,9 +1,7 @@
 import { pyGenerateCards } from "./PythonBridge/senders/pyGenerateCards";
-import { store, updateUser } from "./redux";
+import { store } from "./redux";
 import { addCards, setCards } from "./redux/slices/cards";
-import { isLocalMode } from "./user";
 import { setMakeCardsLoading } from "./redux/slices/makeCardsText";
-import { generateCardsRequest } from "./server-api/cards";
 import { errorToast, infoToast, successToast } from "./toast";
 import { addFailedCards } from "./redux/slices/failedCards";
 import { pyEditSetting } from "./PythonBridge/senders/pyEditSetting";
@@ -72,31 +70,13 @@ export async function generateCards(
 ) {
   dispatch(setMakeCardsLoading(true));
   try {
-    if (isLocalMode()) {
-      let res = await pyGenerateCards(text, customPrompt, cardType, language);
-      dispatch(setMakeCardsLoading(false));
-
-      let cardsRawString = res.cardsRawString;
-      if (cardsRawString) {
-        handleCardsRawString(cardsRawString, cardType, dispatch);
-      }
-    } else {
-      let res = await generateCardsRequest(
-        text,
-        customPrompt,
-        cardType,
-        language
-      );
-
-      dispatch(setMakeCardsLoading(false));
-      if (res.status === "success") {
-        dispatch(updateUser(res.data.user));
-        let rawString = res.data.response.content;
-        handleCardsRawString(rawString, cardType, dispatch);
-      }
-    }
+    const res = await pyGenerateCards(text, customPrompt, cardType, language);
+    if (!res.cardsRawString) throw new Error("The AI did not return flashcard JSON. Retry or change the model/prompt.");
+    await handleCardsRawString(res.cardsRawString, cardType, dispatch);
   } catch (err) {
-    errorToast("Error Making Cards", err.message);
+    errorToast("Error Making Cards", err.message || String(err));
+  } finally {
+    dispatch(setMakeCardsLoading(false));
   }
 }
 

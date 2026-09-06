@@ -1,11 +1,11 @@
 import json
 from os import path
-from typing import Any, Optional
+from typing import Any
 
 from aqt import mw
 
 from project_paths import settings_path
-from util import rewrite_json_file, UserMode
+from util import rewrite_json_file
 
 
 def get_ankibrain_version():
@@ -40,14 +40,9 @@ default_settings = {
     'deleteCardsAfterAdding': True,
     "colorMode": "dark",
     "currentVersion": get_ankibrain_version(),
-    "documents_saved": [],  # local mode only, server mode uses user.documentsSaved
-    "lifetime_total_cost": 0,
-    "user_mode": None,
+    "documents_saved": [],
     "llmModel": 'gpt-5.6-luna',
     'temperature': 0,
-    'user': None,
-    'devMode': False,
-    'showBootReminderDialog': True,
     'showCardBottomHint': True,
     'showSidePanel': True,
     'tempCards': [],
@@ -117,32 +112,10 @@ class SettingsManager:
         return self.settings[k]
 
     def get_settings_current_version(self):
-        v = ''
-        if self.settings['currentVersion'] is None:
-            """
-            In this scenario, we were not storing currentVersion previously. 
-            By returning '0', this will always appear as if the app was just updated. 
-            """
-            return '0'
-
-        v = self.settings['currentVersion']
-        return v
-
-    def get_user_mode(self) -> Optional[UserMode]:
-        user_mode = self.get('user_mode')
-        if user_mode is not None:
-            return UserMode(user_mode)
-        else:
-            return None
-
-    def set_user_mode(self, user_mode: UserMode):
-        self.edit('user_mode', user_mode.value)
+        return self.settings.get('currentVersion') or '0'
 
     def set_new_version(self, version: str, save=True):
         self.edit('currentVersion', version, save=save)
-
-    def add_cost(self, cost: int, save=True):
-        self.edit('lifetime_total_cost', cost + self.settings['lifetime_total_cost'], save=save)
 
     def add_saved_document(self, doc):
         docs = self.get('documents_saved')

@@ -1,23 +1,15 @@
 import json
 import platform
 import subprocess
-from enum import Enum
 from os import path
 
-from project_paths import root_project_dir, venv_path
+from project_paths import root_project_dir, python_path
 
 root_dir = root_project_dir
 
 
 def has_ankibrain_completed_install():
-    # Should be /user_files/venv
-    # TODO: maybe check for individual dependencies
-    return path.isdir(path.join(venv_path))
-
-
-class UserMode(Enum):
-    LOCAL = 'LOCAL'
-    SERVER = 'SERVER'
+    return path.isfile(python_path)
 
 
 def rewrite_json_file(new_data: dict, f):

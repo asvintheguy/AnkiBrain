@@ -27,7 +27,6 @@ import { setUseDocuments } from "../../../api/documents";
 import { setMakeCardsText } from "../../../api/redux/slices/makeCardsText";
 import { useEffect, useState } from "react";
 import { errorToast } from "../../../api/toast";
-import { isLocalMode } from "../../../api/user";
 import { CustomPromptTopicExplanationModal } from "./CustomPromptTopicExplanationModal";
 
 export function TopicExplanationScreen(props) {

@@ -6,6 +6,7 @@ import io
 import json
 import os
 import stat
+import sys
 import tempfile
 import threading
 import time
@@ -143,6 +144,7 @@ def check_auth():
                 assert body['stream'] is True and body['store'] is False and body['tools'] == [] and body['tool_choice'] == 'none'
                 assert body['reasoning'] == {'effort': 'low'}
                 assert auth.models(options) == ['available-model']
+                fails(lambda: ai.run_provider('hello', stop=['OK'], config=config), 'stop sequences')
 
                 before = len(grants)
                 status[0] = 401
@@ -160,6 +162,73 @@ def check_auth():
                     assert len(calls) == before + 1
                 status[0] = 200
                 complete = copy.deepcopy(reply)
+                # Codex may send the answer only in deltas/item.done, with an empty terminal output.
+                final = {'type': 'message', 'role': 'assistant', 'phase': 'final_answer',
+                         'content': [{'type': 'output_text', 'text': 'OK λ'}]}
+                added = {'type': 'response.output_item.added', 'output_index': 1,
+                         'item': {**final, 'content': []}}
+                deltas = [{'type': 'response.output_text.delta', 'output_index': 1, 'content_index': 0, 'delta': value}
+                          for value in ('O', 'K ', 'λ')]
+                done = {'type': 'response.output_text.done', 'output_index': 1, 'content_index': 0, 'text': 'OK λ'}
+                item_done = {'type': 'response.output_item.done', 'output_index': 1, 'item': final}
+                terminal = {'type': 'response.completed', 'response': {'status': 'completed', 'output': []}}
+                for events in (deltas, [done], [item_done], [added, *deltas], [added, *deltas, done, item_done]):
+                    reply[:] = [*events, terminal]
+                    assert ai.run_provider('hello', config=config) == 'OK λ', 'Lost or duplicated streamed text'
+                commentary = {'type': 'response.output_item.done', 'output_index': 0,
+                              'item': {**final, 'phase': 'commentary'}}
+                reply[:] = [commentary, *deltas, item_done, terminal]
+                assert ai.run_provider('hello', config=config) == 'OK λ'
+                # The final snapshot is authoritative when supplied; never append it to its deltas.
+                reply[:] = [*deltas, {'type': 'response.completed', 'response': {'status': 'completed', 'output': [final]}}]
+                assert ai.run_provider('hello', config=config) == 'OK λ'
+                for events in ([*deltas], [*deltas, {'type': 'response.incomplete'}],
+                               [*deltas, {'type': 'response.failed'}], [terminal],
+                               [*deltas, {'type': 'response.refusal.delta', 'delta': 'SECRET'}, terminal],
+                               [commentary, terminal],
+                               [*deltas, {'type': 'response.output_item.added', 'output_index': 2,
+                                          'item': {'type': 'function_call'}}, terminal],
+                               [*deltas, {'type': 'response.output_item.done', 'output_index': 1,
+                                          'item': {**final, 'content': [{'type': 'refusal', 'refusal': 'SECRET'}]}}, terminal]):
+                    reply[:] = events
+                    fails(lambda: ai.run_provider('hello', config=config))
+                if '--runtime' in sys.argv:
+                    import ProviderLLM
+                    from ChatAIWithoutDocuments import ChatAIWithoutDocuments
+                    from ChatAIWithDocuments import ChatAIWithDocuments
+                    from langchain.chains import ConversationalRetrievalChain
+                    from langchain.schema import BaseRetriever, Document
+
+                    class Retriever(BaseRetriever):
+                        def _get_relevant_documents(self, query, *, run_manager=None):
+                            return [Document(page_content='Water freezes at 0°C.', metadata={'source': 'test.txt'})]
+
+                        async def _aget_relevant_documents(self, query, *, run_manager=None):
+                            return self._get_relevant_documents(query)
+
+                    def answer(text):
+                        reply[:] = [{'type': 'response.output_text.delta', 'output_index': 0, 'content_index': 0, 'delta': text}, terminal]
+
+                    # Actual feature classes and LangChain, using the same native HTTP/SSE path as Test.
+                    with patch.object(ai, 'load_config', return_value=config), patch.object(ProviderLLM, 'load_config', return_value=config):
+                        chat = ChatAIWithoutDocuments()
+                        answer('Water freezes at 0°C.')
+                        assert chat.human_message('When does water freeze?')[0] == 'Water freezes at 0°C.'
+                        assert chat.explain_topic('water', {'custom_prompt': '', 'language': 'English',
+                                                          'level_of_detail': 'SHORT', 'level_of_expertise': 'BEGINNER'}) == 'Water freezes at 0°C.'
+                        for card_type, cards in [('basic', [{'front': 'When does water freeze?', 'back': '0°C'}]),
+                                                 ('cloze', [{'text': 'Water freezes at *0°C*.'}])]:
+                            answer(json.dumps(cards))
+                            assert json.loads(chat.generate_cards('Water', {'type': card_type, 'custom_prompt': '', 'language': 'English'})) == cards
+                        docs = ChatAIWithDocuments.__new__(ChatAIWithDocuments)  # No embedding download or real document database.
+                        docs.qa = ConversationalRetrievalChain.from_llm(ProviderLLM.ProviderLLM(), Retriever(), return_source_documents=True)
+                        answer('Water freezes at 0°C.')
+                        # Supply history without constructing the optional document database.
+                        original = docs.qa
+                        docs.qa = lambda fields: original({**fields, 'chat_history': []})
+                        text, sources = docs.human_message('When does water freeze?')
+                        assert text == 'Water freezes at 0°C.' and sources[0]['source'] == 'test.txt'
+
                 for bad in ([{'type': 'response.incomplete'}], [{'type': 'error', 'message': 'SECRET'}],
                             [{'type': 'response.output_text.delta', 'delta': 'partial'}],
                             [dict(type='response.completed', response={'status': 'completed', 'output': [{'type': 'function_call'}]})]):

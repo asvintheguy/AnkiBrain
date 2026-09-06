@@ -18,25 +18,14 @@ import {
   Text,
   useColorMode,
 } from "@chakra-ui/react";
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { AddIcon, DeleteIcon } from "@chakra-ui/icons";
 import { useDispatch, useSelector } from "react-redux";
 import "./ImportScreen.css";
 import { deleteAllDocuments, importDocuments } from "../../../api/documents";
-import { isLocalMode } from "../../../api/user";
-import { infoToast } from "../../../api/toast";
-import { setDocuments } from "../../../api/redux/slices/documentsSlice";
 
 export function ImportScreen(props) {
   let importedDocs = useSelector((state) => state.documents.value);
-  let user = useSelector((state) => state.user.value);
-
-  useEffect(() => {
-    if (user) {
-      dispatch(setDocuments(user.documentsStored));
-    }
-  }, [user]);
-
   const [showDeleteAlert, setShowDeleteAlert] = useState(false);
   const deleteAlertCancelRef = useRef();
   const documentsLoading = useSelector((state) => state.documentsLoading.value);
@@ -71,11 +60,6 @@ export function ImportScreen(props) {
     );
   };
 
-  // Server mode but no user added.
-  if (!isLocalMode() && user === null) {
-    return <Text>This screen is unavailable until you log in.</Text>;
-  }
-
   return (
     <Box {...props}>
       <Box ms={5}>
@@ -98,11 +82,9 @@ export function ImportScreen(props) {
               When you check the "Use Documents" option, these documents will be
               used when you chat with the AI or ask for a topic explanation.
             </Text>
-            {!isLocalMode() && (
-              <Text fontSize={12} color={"gray"} p={0} m={0} mt={1}>
-                Monthly storage cost is approx. $0.014 per 2,000 words.
-              </Text>
-            )}
+            <Text fontSize={12} color={"gray"} mt={1}>
+              Documents are indexed on this computer. Relevant excerpts are sent to your selected AI provider when used.
+            </Text>
           </Flex>
 
           <Flex direction={"row"} alignSelf={"center"}>
@@ -117,7 +99,7 @@ export function ImportScreen(props) {
                 Import Documents
               </Button>
               <Text fontSize={12} color={"gray"}>
-                Max {isLocalMode() ? "1 GB" : "100 MB"} per file. Supported
+                Max 1 GB per file. Supported
                 document types: PDF, DOCX, TXT, PPTX, HTML
               </Text>
             </Flex>
@@ -127,7 +109,7 @@ export function ImportScreen(props) {
               onClick={() => {
                 setShowDeleteAlert(true);
               }}
-              isDisabled={user !== null && user.documentsStored.length === 0}
+              isDisabled={importedDocs.length === 0 || documentsLoading}
             >
               <DeleteIcon fontSize={"sm"} me={2} />
               Delete Documents
@@ -140,9 +122,9 @@ export function ImportScreen(props) {
             <Spinner color={"accent"} />
           </Flex>
         )}
-        {user !== null && !documentsLoading && (
+        {!documentsLoading && (
           <Box maxHeight={1000} overflowY={"scroll"}>
-            {user.documentsStored.map((doc, i) => (
+            {importedDocs.map((doc, i) => (
               <Card
                 mt={5}
                 mb={5}
@@ -168,8 +150,7 @@ export function ImportScreen(props) {
                     <Flex direction={"column"} alignItems={"start"}>
                       <Heading fontSize={"sm"}>Name</Heading>
                       <Text>
-                        {doc.file_name + (doc.extension ? doc.extension : "")}{" "}
-                        {/*Server doc.file_name has extension in it but python layer doesn't*/}
+                        {doc.file_name_with_extension || doc.file_name + (doc.extension || "")}
                       </Text>
                     </Flex>
 

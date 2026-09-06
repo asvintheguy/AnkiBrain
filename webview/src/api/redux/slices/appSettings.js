@@ -4,11 +4,21 @@ export const appSettings = createSlice({
   name: "appSettings",
   initialState: {
     ai: {
-      llmModel: "gpt-5.6-luna",
-      temperature: 0,
+      llmModel: "",
+      temperature: "Provider default",
+      provider: "chatgpt",
+      signedIn: false,
+      configured: false,
+      engineReady: false,
+      error: "",
     },
   },
   reducers: {
+    setAIConnection: (state, { payload }) => {
+      const { provider, model, temperature, signedIn, configured, engineReady, error } = payload;
+      Object.assign(state.ai, { provider, llmModel: model, temperature: temperature ?? "Provider default",
+        signedIn, configured, engineReady, error });
+    },
     setLLMModel: (state, action) => {
       state.ai.llmModel = action.payload;
     },
@@ -18,4 +28,4 @@ export const appSettings = createSlice({
   },
 });
 
-export const { setLLMModel, setTemperature } = appSettings.actions;
+export const { setLLMModel, setTemperature, setAIConnection } = appSettings.actions;

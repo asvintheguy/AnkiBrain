@@ -2,12 +2,12 @@ import "./App.css";
 import "bootstrap-icons/font/bootstrap-icons.css";
 import "bootstrap/dist/css/bootstrap.min.css";
 import "bootstrap/dist/js/bootstrap.bundle.min";
-import React, { useEffect, useState } from "react";
+import React, { useEffect } from "react";
 
 import { Route, Routes, useNavigate } from "react-router-dom";
 import { CardMakingScreen } from "./Components/Screens/CardMakingScreen/CardMakingScreen";
 import { TalkScreen } from "./Components/Screens/TalkScreen/TalkScreen";
-import { LoginModal } from "./Components/modals/LoginModal";
+import { AIConnection } from "./Components/AIConnection";
 import { SideBar } from "./Components/SideBar/SideBar";
 import { BottomNav } from "./Components/BottomNav/BottomNav";
 import { TopicExplanationScreen } from "./Components/Screens/TopicExplanationScreen/TopicExplanationScreen";
@@ -19,33 +19,20 @@ import { GlobalLoadingIndicator } from "./Components/GlobalLoadingIndicator";
 import { setBoolGlobalLoadingIndicator } from "./api/redux/slices/bGlobalLoadingIndicator";
 import { AppAlertModal } from "./Components/modals/AppAlertModal";
 import { SettingsScreen } from "./Components/Screens/SettingsScreen/SettingsScreen";
-import { EmailVerificationModal } from "./Components/modals/EmailVerificationModal";
 import { InterprocessCommand } from "./api/PythonBridge/InterprocessCommand";
-import { PROD_SERVER_URL } from "./api/server-api/networking";
 import {
   ChakraProvider,
   ColorModeScript,
   extendTheme,
-  useColorMode,
 } from "@chakra-ui/react";
-import { BootReminderModal } from "./Components/modals/BootReminderModal";
 
 function App() {
-  const appDidBoot = useSelector((state) => state.appDidBoot.value);
-  const [showBootReminderModalNow, setShowBootReminderModalNow] =
-    useState(false);
-  const [loggedIn, setLoggedIn] = useState(false);
-  const showBootReminderDialog = useSelector(
-    (state) => state.showBootReminderDialog.value
-  );
-  const showLoginModal = useSelector((state) => state.showLoginModal.value);
-  const appAlertModal = useSelector((state) => state.appAlertModal.value);
+  const ai = useSelector((state) => state.appSettings.ai);
   const dispatch = useDispatch();
   const navigate = useNavigate();
   let globalLoading = useSelector(
     (state) => state.bGlobalLoadingIndicator.value
   );
-  const { colorMode, toggleColorMode } = useColorMode();
 
 
   //Function that can be called globally to render the loading screen
@@ -61,14 +48,10 @@ function App() {
             cmd: InterprocessCommand.DID_LOAD_SETTINGS,
             data: {
               colorMode: "dark",
-              currentVersion: "0.6.2",
+              currentVersion: "1.0.0-providers.3",
               documents_saved: [],
               llmModel: "gpt-5.6-luna",
               temperature: 0,
-              user_mode: "SERVER",
-              user: null,
-              devMode: false,
-              apiBaseUrl: PROD_SERVER_URL,
             },
           },
           dispatch,
@@ -83,14 +66,6 @@ function App() {
       }
     })();
   }, []);
-
-  useEffect(() => {
-    // showBootReminderDialog represents the option to show it at boot.
-    // showBootReminderModalNow allows us to control whether it is currently shown.
-    if (appDidBoot && showBootReminderDialog) {
-      setShowBootReminderModalNow(true);
-    }
-  }, [appDidBoot]);
 
   const theme = extendTheme({
     fonts: {
@@ -176,17 +151,8 @@ function App() {
             flexDirection: "column",
           }}
         >
-          {showLoginModal && <LoginModal isOpen={showLoginModal} />}
-
           {globalLoading && <GlobalLoadingIndicator />}
           <AppAlertModal />
-          <BootReminderModal
-            show={showBootReminderModalNow}
-            onClose={() => {
-              setShowBootReminderModalNow(false);
-            }}
-          />
-          <EmailVerificationModal />
 
           {!globalLoading && (
             <>
@@ -201,7 +167,7 @@ function App() {
                   opacity: globalLoading ? 0.1 : 1,
                 }}
               >
-                <Routes>
+                {!ai.configured || !ai.engineReady ? <AIConnection welcome /> : <Routes>
                   <Route
                     path={PATHS.TOPIC_EXPLANATION}
                     element={<TopicExplanationScreen />}
@@ -213,10 +179,10 @@ function App() {
                   <Route path={PATHS.TALK} element={<TalkScreen />} />
                   <Route path={PATHS.IMPORT} element={<ImportScreen />} />
                   <Route path={PATHS.SETTINGS} element={<SettingsScreen />} />
-                </Routes>
+                </Routes>}
               </div>
 
-              <BottomNav />
+              {ai.configured && ai.engineReady && <BottomNav />}
             </>
           )}
         </div>

@@ -8,7 +8,6 @@ from AnkiBrainModule import AnkiBrain
 from AnkiBrainDocument import AnkiBrainDocument
 from InterprocessCommand import InterprocessCommand as IC
 from cards import add_basic_card, add_cloze_card
-from networking import fetch, postDocument
 
 
 def rewrite_json_file(new_data: dict, f):
@@ -162,6 +161,7 @@ class ReactBridge:
 
             elif cmd == IC.DELETE_ALL_DOCUMENTS:
                 await self.app.chatAI.delete_all_documents()
+                mw.settingsManager.clear_saved_documents()
                 self.send_cmd(IC.DID_DELETE_ALL_DOCUMENTS, commandId=commandId)
 
             elif cmd == IC.OPEN_DOCUMENT_BROWSER:
@@ -169,16 +169,6 @@ class ReactBridge:
 
             elif cmd == IC.DID_CLOSE_DOCUMENT_BROWSER_NO_SELECTIONS:
                 self.send_cmd(IC.DID_CLOSE_DOCUMENT_BROWSER_NO_SELECTIONS, commandId=commandId)
-
-            elif cmd == IC.UPLOAD_DOCUMENT:
-                try:
-                    path = data['path']
-                    url = data['url']
-                    accessToken = data['accessToken']
-                    res = await postDocument(path, url, accessToken)
-                    self.send_cmd(IC.DID_UPLOAD_DOCUMENT, data=res, commandId=commandId)
-                except Exception as e:
-                    self.send_cmd(IC.DID_UPLOAD_DOCUMENT, error=str(e), commandId=commandId)
 
             elif cmd == IC.SPLIT_DOCUMENT:
                 try:
@@ -188,19 +178,8 @@ class ReactBridge:
                 except Exception as e:
                     self.send_cmd(IC.DID_SPLIT_DOCUMENT, error=str(e), commandId=commandId)
 
-            elif cmd == IC.NETWORK_REQUEST:
-                url = data['url']
-                verb = data['verb']
-                data = data['data']
-
-                try:
-                    res = await fetch(url, verb, data)  # todo try/except, send err to js
-                    self.send_cmd(IC.DID_NETWORK_REQUEST, data=res, commandId=commandId)
-                except Exception as e:
-                    self.send_cmd(IC.DID_NETWORK_REQUEST, error=str(e), commandId=commandId)
-
             elif cmd == IC.OPEN_AI_SETTINGS:
-                self.app.guiThreadSignaler.showAISettingsSignal.emit()
+                self.app.guiThreadSignaler.showAISettingsSignal.emit(data.get('signIn') is True)
                 self.send_cmd(IC.DID_OPEN_AI_SETTINGS, commandId=commandId)
 
             elif cmd == IC.SET_OPENAI_API_KEY:
@@ -225,6 +204,6 @@ class ReactBridge:
                     AnkiBrain AI Engine encountered an error. 
                     Details of the error:\n\n{str(e)}
                     
-                    If you still need help, go to https://www.reddit.com/r/ankibrain/.
+                    Check Connect AI in the AnkiBrain menu. Help: https://github.com/asvintheguy/AnkiBrain/issues
                     '''
-            })
+            }, commandId=data.get('commandId'), error=str(e))

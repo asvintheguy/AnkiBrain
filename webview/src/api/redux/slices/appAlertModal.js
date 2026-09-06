@@ -7,7 +7,6 @@ export const appAlertModal = createSlice({
       show: false,
       header: "header",
       alertText: "alertText",
-      onClose: async () => {},
     },
   },
   reducers: {

@@ -15,11 +15,8 @@ export function AppAlertModal(props) {
   const dispatch = useDispatch();
   const appAlertModal = useSelector((state) => state.appAlertModal.value);
 
-  const close = async () => {
+  const close = () => {
     dispatch(setAppAlertModal({ show: false, header: "", alertText: "" }));
-    if (typeof appAlertModal.onClose === "function") {
-      await appAlertModal.onClose();
-    }
   };
 
   return (

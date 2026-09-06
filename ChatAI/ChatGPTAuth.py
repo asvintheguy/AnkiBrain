@@ -80,7 +80,7 @@ def _read(path):
             raise ValueError()
         return data
     except FileNotFoundError:
-        raise RuntimeError('ChatGPT is not signed in. Use Sign in with ChatGPT in AI Provider Settings.') from None
+        raise RuntimeError('ChatGPT is not signed in. Use Sign in with ChatGPT, or AnkiBrain → Connect AI.') from None
     except (OSError, ValueError, TypeError, KeyError):
         raise RuntimeError('Cannot read the private ChatGPT session. Sign out locally and sign in again.') from None
 
@@ -354,37 +354,76 @@ def _events(response):
             break
 
 
+def _message_text(item):
+    if item['type'] == 'reasoning':
+        return None
+    if item['type'] != 'message' or item.get('role') != 'assistant':
+        raise RuntimeError('ChatGPT requested unsupported output/tools; nothing was executed.')
+    if item.get('phase') not in (None, 'commentary', 'final_answer'):
+        raise RuntimeError('ChatGPT returned an unsupported message phase.')
+    content = item.get('content', [])
+    if not isinstance(content, list):
+        raise ValueError()
+    for part in content:
+        if part['type'] != 'output_text' or not isinstance(part['text'], str):
+            raise RuntimeError('ChatGPT declined or returned non-text output.')
+    return None if item.get('phase') == 'commentary' else '\n'.join(part['text'] for part in content)
+
+
 def run_chatgpt(prompt, options, timeout, environment):
     body = {'model': options['model'], 'instructions': TEXT_INSTRUCTIONS, 'store': False, 'stream': True,
             'input': [{'role': 'user', 'content': [{'type': 'input_text', 'text': prompt}]}], 'tools': [], 'tool_choice': 'none'}
     if options['effort']:
         body['reasoning'] = {'effort': options['effort']}
     try:
+        items, parts = {}, {}
         # ponytail: urllib socket timeout, not a total streaming deadline; add one for slow-drip endpoints.
         with _open(options, RESPONSES_URL, timeout, body) as response:
             for event in _events(response):
                 kind = event.get('type')
-                if kind in ('error', 'response.failed', 'response.incomplete'):
+                if kind in ('error', 'response.failed', 'response.incomplete', 'response.cancelled'):
                     raise RuntimeError('ChatGPT failed or returned incomplete output. No partial cards were accepted.')
+                if isinstance(kind, str) and kind.startswith('response.refusal.'):
+                    raise RuntimeError('ChatGPT declined the request. No partial cards were accepted.')
+                if kind in ('response.output_item.added', 'response.output_item.done',
+                            'response.output_text.delta', 'response.output_text.done'):
+                    index = event.get('output_index', 0)
+                    if type(index) is not int or index < 0:
+                        raise ValueError()
+                    if kind.startswith('response.output_item.'):
+                        _message_text(event['item'])  # Reject tools/refusals even without a final snapshot.
+                        items[index] = event['item'] if kind.endswith('.done') else {**event['item'], 'content': []}
+                    else:
+                        content_index = event.get('content_index', 0)
+                        value = event['delta' if kind.endswith('.delta') else 'text']
+                        if type(content_index) is not int or content_index < 0 or not isinstance(value, str):
+                            raise ValueError()
+                        key = (index, content_index)
+                        if kind.endswith('.done'):
+                            parts[key] = [value]  # A snapshot replaces its deltas, never duplicates them.
+                        else:
+                            parts.setdefault(key, []).append(value)
                 if kind == 'response.completed':
                     result = event['response']
                     if result.get('status') != 'completed':
                         raise RuntimeError('ChatGPT did not complete the response.')
-                    texts = []
-                    for item in result['output']:
-                        if item['type'] == 'reasoning':
-                            continue
-                        if item['type'] != 'message' or item.get('role') != 'assistant':
-                            raise RuntimeError('ChatGPT requested unsupported output/tools; nothing was executed.')
-                        if item.get('phase') == 'commentary':
-                            continue
-                        if item.get('phase') not in (None, 'final_answer'):
-                            raise RuntimeError('ChatGPT returned an unsupported message phase.')
-                        for content in item['content']:
-                            if content['type'] != 'output_text' or not isinstance(content['text'], str):
-                                raise RuntimeError('ChatGPT declined or returned non-text output.')
-                            texts.append(content['text'])
-                    return '\n'.join(texts)
+                    output = result.get('output', [])
+                    if not isinstance(output, list):
+                        raise ValueError()
+                    if output:
+                        texts = [_message_text(item) for item in output]
+                    else:
+                        # Codex streams can omit output from the terminal event. Keep the earlier
+                        # answer, but release it ONLY after an explicit successful completion.
+                        texts = []
+                        for index in sorted(set(items) | {key[0] for key in parts}):
+                            text = _message_text(items[index]) if index in items else ''
+                            if text is not None:
+                                texts.append(text or '\n'.join(''.join(parts[key]) for key in sorted(parts) if key[0] == index))
+                    answer = '\n'.join(text for text in texts if text is not None)
+                    if not answer.strip():
+                        raise RuntimeError('ChatGPT completed without an answer. Retry or select another account model; no cards were accepted.')
+                    return answer
     except (ValueError, UnicodeError, KeyError, TypeError, AttributeError, OSError, HTTPException):
         raise RuntimeError('ChatGPT returned an invalid or interrupted stream. No partial output was accepted.') from None
     raise RuntimeError('ChatGPT stream ended without a completed response.')

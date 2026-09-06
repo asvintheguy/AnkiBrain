@@ -1,7 +1,6 @@
 import asyncio
 import json
 import os
-import platform
 import signal
 import threading
 
@@ -16,13 +15,12 @@ from ExplainTalkButtons import ExplainTalkButtons
 from InterprocessCommand import InterprocessCommand as IC
 from AIProviderDialog import AIProviderDialog
 from AIProviders import load_config
-from PostUpdateDialog import PostUpdateDialog
+from ChatGPTAuth import signed_in
 from SidePanel import SidePanel
-from UserModeDialog import show_user_mode_dialog
 from card_injection import handle_card_will_show
 from changelog import ChangelogDialog
 from project_paths import dotenv_path
-from util import run_win_install, run_macos_install, run_linux_install, UserMode
+from InstallDialog import show_install_dialog
 
 #The "GUIThreadSignaler" class allows the non-UI thread to modify/update the UI thread. Some uses include
 #resetting the UI, opening a file browser, and showing AI provider settings
@@ -32,7 +30,7 @@ class GUIThreadSignaler(QObject):
     """
     resetUISignal = pyqtSignal()
     openFileBrowserSignal = pyqtSignal(int)  # takes commandId so we can resolve the request
-    showAISettingsSignal = pyqtSignal()
+    showAISettingsSignal = pyqtSignal(bool)
     sendToJSFromAsyncThreadSignal = pyqtSignal(dict)
 
     def __init__(self):
@@ -45,8 +43,8 @@ class GUIThreadSignaler(QObject):
     def send_to_js_from_async_thread(self, json_dict: dict):
         mw.ankiBrain.sidePanel.webview.send_to_js(json_dict)
 
-    def show_ai_settings(self):
-        mw.ankiBrain.show_ai_provider_settings()
+    def show_ai_settings(self, sign_in=False):
+        mw.ankiBrain.show_ai_provider_settings(sign_in=sign_in)
 
     def reset_ui(self):
         mw.reset()
@@ -75,22 +73,16 @@ class GUIThreadSignaler(QObject):
 
         print(f'Selected documents: {json.dumps(documents)}')
 
-        # user_mode = mw.settingsManager.get_user_mode()
-        # if user_mode == UserMode.SERVER:
         mw.ankiBrain.reactBridge.send_cmd(
             IC.DID_SELECT_DOCUMENTS,
             data={'documents': documents},
             commandId=commandId
         )
 
-        # elif user_mode == UserMode.LOCAL:
-        #     mw.ankiBrain.reactBridge.trigger(IC.ADD_DOCUMENTS, documents=documents)
-
 #The "AnkiBrain" class is the main class. It is responsible for initializing the application, UI setup, file browser interactions,
 #webview load handling. 
 class AnkiBrain:
-    def __init__(self, user_mode: UserMode = UserMode.LOCAL):
-        self.user_mode = user_mode
+    def __init__(self):
         self.loop = None
         self.sidePanel = SidePanel("AnkiBrain", mw)
         self.sidePanel.webview.page().loadFinished.connect(self.on_webengine_load_finished)
@@ -100,6 +92,7 @@ class AnkiBrain:
         self.selectedText = ''
         self.chatAI = ChatAIModuleAdapter()  # Requires async starting by calling .start
         self.chatReady = False
+        self.startup_error = ''
 
         # Should go last because this object takes self and can call items.
         # Therefore, risk of things not completing setup.
@@ -125,20 +118,9 @@ class AnkiBrain:
         gui_hooks.webview_did_receive_js_message.append(self.handle_anki_card_webview_pycmd)
 
         add_ankibrain_menu_item('Show/Hide AnkiBrain', self.toggle_panel)
-        add_ankibrain_menu_item('Switch User Mode...', show_user_mode_dialog)
-
-        if self.user_mode == UserMode.LOCAL:
-            add_ankibrain_menu_item('Restart AI...', self.restart_async_members_from_sync)
-            add_ankibrain_menu_item('AI Provider Settings...', self.show_ai_provider_settings)
-            add_ankibrain_menu_item('Reinstall...', reinstall)
-
-        # Check if AnkiBrain has been updated.
-        has_updated = mw.settingsManager.has_ankibrain_updated()
-        if has_updated:
-            # If updated, need to have the user reinstall python dependencies.
-            # Show PostUpdateDialog.
-            mw.updateDialog = PostUpdateDialog(mw)
-            mw.updateDialog.show()
+        add_ankibrain_menu_item('Connect AI...', self.show_ai_provider_settings)
+        add_ankibrain_menu_item('Restart AI...', self.restart_async_members_from_sync)
+        add_ankibrain_menu_item('Set Up / Repair Study Engine...', show_install_dialog)
 
         add_ankibrain_menu_item('Show Changelog', show_changelog)
         self.main()
@@ -148,25 +130,27 @@ class AnkiBrain:
         self.webview_loaded = True
 
     async def load_user_settings(self):
-        settings = mw.settingsManager.settings
+        # Never hydrate obsolete server accounts/tokens into the webview.
+        settings = {key: mw.settingsManager.get(key) for key in mw.settingsManager.default_settings}
         print('Sending DID_LOAD_USER_FILES')
         self.reactBridge.send_cmd(IC.DID_LOAD_SETTINGS, settings)
-        if self.user_mode == UserMode.LOCAL:
-            self.notify_ai_settings_changed()
+        self.notify_ai_settings_changed()
 
     def notify_ai_settings_changed(self):
+        metadata = {'provider': 'chatgpt', 'model': '', 'temperature': None,
+                    'signedIn': False, 'configured': False, 'engineReady': self.chatReady,
+                    'error': self.startup_error}
         try:
             config = load_config()
             provider = config['provider']
             options = config['providers'][provider]
-            model = f"{provider}: {options['model']}"
-            temperature = options.get('temperature')
-        except (ValueError, OSError):
-            model, temperature = 'Local AI (check configuration)', None
-        # Only public metadata goes to JS; never pass the provider configuration.
-        self.reactBridge.send_to_js({'cmd': 'localAISettingsChanged', 'data': {
-            'model': model, 'temperature': temperature,
-        }})
+            connected = signed_in(options) if provider == 'chatgpt' else False
+            metadata.update(provider=provider, model=options['model'], temperature=options.get('temperature'),
+                            signedIn=connected, configured=connected if provider == 'chatgpt' else True)
+        except (ValueError, OSError) as error:
+            metadata['error'] = str(error)
+        # Only public status goes to JS; never pass tokens, paths, headers, or API keys.
+        self.reactBridge.send_to_js({'cmd': 'aiSettingsChanged', 'data': metadata})
 
     async def _start_async_members(self):
         """
@@ -178,14 +162,16 @@ class AnkiBrain:
             print('Webview is not loaded yet, sleeping async...')
             await asyncio.sleep(0.1)
 
-        if self.user_mode == UserMode.LOCAL:
-            self.reactBridge.send_cmd(IC.SET_WEBAPP_LOADING_TEXT, {'text': 'Starting AI Engine...'})
-            print('Starting AnkiBrain...')
+        self.reactBridge.send_cmd(IC.SET_WEBAPP_LOADING_TEXT, {'text': 'Starting AnkiBrain...'})
+        self.startup_error = ''
+        try:
             await self.chatAI.start()
             self.chatReady = True
-            print('AnkiBrain ChatAI loaded. App is ready.')
-
-        self.reactBridge.send_cmd(IC.SET_WEBAPP_LOADING_TEXT, {'text': 'Loading your settings...'})
+        except Exception:
+            await self.chatAI.stop()
+            self.chatReady = False
+            self.startup_error = 'The study engine could not start. Check your AI settings, or use Set Up / Repair Study Engine in the AnkiBrain menu.'
+        # Startup failures must not trap people behind a spinner or hide sign-in.
         await self.load_user_settings()
         self.reactBridge.send_cmd(IC.DID_FINISH_STARTUP)
 
@@ -194,10 +180,8 @@ class AnkiBrain:
         Stop all async members here.
         :return:
         """
-        if self.user_mode == UserMode.LOCAL:
-            print('Stopping AnkiBrain...')
-            await self.chatAI.stop()
-            self.chatReady = False
+        await self.chatAI.stop()
+        self.chatReady = False
 
     async def restart_async_members(self):
         print('Restarting AnkiBrain...')
@@ -281,15 +265,27 @@ class AnkiBrain:
             self.sidePanel.show()
             mw.settingsManager.edit('showSidePanel', True)
 
-    def show_ai_provider_settings(self):
+    def show_ai_provider_settings(self, checked=False, *, sign_in=False):
+        if getattr(self, 'ai_provider_dialog', None) is not None and self.ai_provider_dialog.isVisible():
+            self.ai_provider_dialog.raise_()
+            self.ai_provider_dialog.activateWindow()
+            return
         try:
             self.ai_provider_dialog = AIProviderDialog(mw)
         except (ValueError, OSError) as error:
             showInfo(str(error))
             return
-        self.ai_provider_dialog.accepted.connect(self.notify_ai_settings_changed)
+        self.ai_provider_dialog.finished.connect(self.notify_ai_settings_changed)
+        self.ai_provider_dialog.accepted.connect(self._provider_saved)
         self.ai_provider_dialog.setModal(True)
         self.ai_provider_dialog.show()
+        if sign_in:
+            self.ai_provider_dialog.provider.setCurrentIndex(self.ai_provider_dialog.provider.findData('chatgpt'))
+            QTimer.singleShot(0, self.ai_provider_dialog._login_chatgpt)
+
+    def _provider_saved(self):
+        if not self.chatReady:
+            self.restart_async_members_from_sync()
 
     def handle_anki_card_webview_pycmd(self, handled, cmd, context):
         try:
@@ -342,18 +338,6 @@ class AnkiBrain:
 
         self.explainTalkButtons.destroy()
         self.selectedText = ''
-
-
-def reinstall():
-    system = platform.system()
-    if system == 'Windows':
-        run_win_install()
-    elif system == 'Darwin':
-        run_macos_install()
-    elif system == 'Linux':
-        run_linux_install()
-
-    showInfo('Terminal updater has been launched. Restart Anki after install is completed.')
 
 
 def show_changelog():

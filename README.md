@@ -3,14 +3,18 @@
 Unofficial fork of [Rosetta Technologies' AnkiBrain](https://github.com/RosettaTechnologies/AnkiBrain)
 ([original AnkiWeb listing](https://ankiweb.net/shared/info/1915225457)).
 
-Local mode supports **native ChatGPT browser sign-in** and **OpenAI-compatible APIs**,
+Start with **Sign in with ChatGPT**, or use **OpenAI-compatible APIs**,
 including presets for Gemini's eligible free API tier, Grok/xAI, and other endpoints.
 **No provider CLI is required or invoked.** Models, sign-in storage, API keys, base URLs,
 custom headers, timeouts, and request options are configurable. See [AI_PROVIDERS.md](AI_PROVIDERS.md).
 
-**Experimental:** offline OAuth/HTTP tests and real Qt/LangChain integration checks pass.
-The new native login has not yet been completed against a real account or in a full
-running-Anki session. It uses the ChatGPT-backed Codex Responses service directly—not
+**One app, no Local/Server mode switch or AnkiBrain account/balance.** Sign-in is on the
+welcome screen and AI settings are directly accessible from the header and Settings.
+
+**Experimental:** native sign-in/model discovery have been reported working by a user.
+Version **providers.3** fixes dropped streamed answers that caused “AI provider returned no text”.
+Offline OAuth/HTTP, Qt/LangChain feature, and frontend tests pass; live generation still
+needs user verification. It uses the ChatGPT-backed Codex Responses service directly—not
 the ChatGPT website conversation interface. Other subscription logins are not claimed;
 Grok/Gemini API presets are API-key routes, not subscription OAuth. This fork still
 inherits upstream's end-of-life Python 3.9 stack; verify your Anki/OS compatibility.
@@ -26,20 +30,21 @@ inherits upstream's end-of-life Python 3.9 stack; verify your Anki/OS compatibil
    **Install from file…** and select the `.ankiaddon` file. Restart Anki.
    The fork uses the separate folder `ankibrain_providers`; the manifest also declares a
    conflict with the original AnkiWeb add-on. Do not enable both together.
-4. Choose **Local mode**, not Regular/Server mode. Complete **AnkiBrain → Install…** to set
-   up the existing Python/document dependencies, then restart Anki. If the legacy installer
-   fails, use the manual setup below. The dependency download can require several GB.
-5. Open **AnkiBrain → AI Provider Settings…** and select **ChatGPT — native browser sign-in**.
-   Click **Sign in with ChatGPT…** and complete authentication in your browser on the same
-   computer as Anki. No CLI installation or API key is needed.
-6. Click **Load account models**, choose a model, then **Test (uses quota)** and **Save**.
-   If upgrading from a CLI-backed release, this explicit reconfiguration is required;
-   the add-on does not import existing CLI logins or silently switch providers.
+4. Click **Sign in with ChatGPT** on the welcome screen and finish signing in in your
+   browser on the same computer. You can also use **AnkiBrain → Connect AI…**.
+   Your account's models load automatically; review the selected model, optionally
+   **Test (uses quota)**, then **Save & start studying**. No provider CLI or API key is needed.
+5. If the study engine needs setup, follow **AnkiBrain → Set Up / Repair Study Engine…**
+   and the instructions below, then restart Anki. Sign-in works independently of this
+   one-time Python/document setup; the dependency download can require several GB.
+   Existing working environments do **not** need reinstalling for this update.
+6. Upgrading from a CLI-backed release still requires an explicit provider choice and
+   Save; existing CLI logins are not imported. Native logins from providers.2 are preserved.
 
 For Gemini, Grok/xAI, local models, or another API endpoint, follow [AI_PROVIDERS.md](AI_PROVIDERS.md).
 No credentials or machine-specific provider configuration are included in the release.
 
-### Manual dependency setup
+### Install the Python study engine once
 
 Use the official native [Anki Desktop distribution](https://apps.ankiweb.net/).
 Flatpak/Snap confinement may prevent launching the external Python engine or the browser callback;
@@ -73,8 +78,8 @@ macOS, or Visual Studio's **Desktop development with C++** workload on Windows.
 The old macOS/Windows dependency sets may need platform-specific adjustments and were
 not validated here. Linux dependency resolution was checked with Python 3.9.25.
 
-**The environment must be in `user_files/venv`, not a top-level `venv`.** The upstream
-boot routine deletes a top-level `venv`. Python 3.9 is end-of-life; the legacy document
+**The environment must be in `user_files/venv`, not a top-level `venv`.** This fork no longer
+deletes other environments during startup. Python 3.9 is end-of-life; the legacy document
 engine has not yet been modernized. Native authentication adds no provider CLI dependency.
 
 ### Existing AnkiBrain data and updates
@@ -89,6 +94,11 @@ Update GitHub installations by installing a newer `.ankiaddon` from this fork's 
 Anki preserves the fork's `user_files` directory during add-on replacement, but back it up
 before updating. GitHub-only installs do not receive AnkiWeb automatic updates.
 
+Previous Local/Server selections are ignored; all features use your chosen native provider.
+Old server accounts/balances are not used or transferred. Server-hosted documents are not
+fetched or deleted—re-import your originals. Local cards/settings and private provider
+credentials remain in `user_files`; no account credentials are sent to the old server.
+
 ## Build an install file from source
 
 With Git, Python 3.9+, and Node/npm available:
@@ -98,6 +108,7 @@ git clone https://github.com/asvintheguy/AnkiBrain.git
 cd AnkiBrain
 cd webview
 npm exec --yes --package=yarn@1.22.22 -- yarn install --frozen-lockfile --non-interactive
+CI=true npm test -- --watchAll=false --runInBand
 npm run build
 cd ..
 python3 tests/test_ai_providers.py
@@ -137,8 +148,8 @@ GitHub publishing does **not** create an AnkiWeb listing. Publish manually when 
    [Shared Add-ons](https://ankiweb.net/shared/addons/), and select **Upload**.
 5. Create a **new** listing, e.g. **“AnkiBrain — Subscription & API Providers (Unofficial Fork)”**.
    Upload `dist/AnkiBrain-providers.ankiaddon`. Credit Rosetta Technologies and link both
-   the upstream project and this fork's source/issues/setup guide. Explain the Local mode
-   installation, experimental native authentication, provider billing/quota, and cloud data handling.
+   the upstream project and this fork's source/issues/setup guide. Explain the one-time engine
+   setup, experimental native authentication, provider billing/quota, and cloud data handling.
 6. Set the supported Anki versions/platforms according to your tests, add screenshots and
    a changelog, then submit using the site's current review/publication flow. AnkiWeb
    assigns your fork its **own add-on ID**; do not reuse the original `1915225457` listing.

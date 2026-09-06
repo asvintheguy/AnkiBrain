@@ -21,7 +21,6 @@ import {
 } from "../../../api/chat";
 import { InfoOutlineIcon } from "@chakra-ui/icons";
 import { setUseDocuments } from "../../../api/documents";
-import { isLocalMode } from "../../../api/user";
 
 export function TalkScreen() {
   const dispatch = useDispatch();

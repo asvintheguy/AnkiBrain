@@ -1,4 +1,4 @@
-VERSION = '1.0.0-providers.2'
+VERSION = '1.0.0-providers.3'
 
 import os
 import sys
@@ -18,7 +18,7 @@ from project_paths import \
 sys.path.insert(1, ChatAI_module_dir)
 sys.path.insert(1, venv_site_packages_path)
 
-# Also insert bundled_dependencies folder for server mode (needs httpx lib).
+# Small bundled dependencies keep the connection UI usable before engine setup.
 sys.path.insert(1, bundled_deps_dor)
 
 from anki.hooks import addHook

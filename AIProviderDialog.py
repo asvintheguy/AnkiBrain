@@ -6,6 +6,8 @@ from aqt.qt import *
 
 import ChatGPTAuth
 from AIProviders import API_PRESETS, CONFIG_PATH, load_config, run_provider, save_config, validate_config
+from InstallDialog import show_install_dialog
+from util import has_ankibrain_completed_install
 
 
 class AIProviderDialog(QDialog):
@@ -15,32 +17,37 @@ class AIProviderDialog(QDialog):
         self.inputs = {}
         self.login = None
         self.closed = False
-        self.setWindowTitle('AnkiBrain — AI Provider Settings')
-        self.resize(720, 730)
+        self.setWindowTitle('AnkiBrain — Connect AI')
+        self.resize(640, 620)
         layout = QVBoxLayout(self)
-        note = QLabel('Local mode only. No provider CLI is installed or launched. Sign-ins, API keys, and headers '
-                      'stay in private local files, never in the webview. Upgrading from a CLI provider? '
-                      'Choose a provider, sign in again, and Save; previous CLI logins are not imported.')
+        note = QLabel('Connect ChatGPT, then start studying. No AnkiBrain account or balance top-up needed. '
+                      'Your sign-in stays private on this computer.')
         note.setWordWrap(True)
         layout.addWidget(note)
+        if not has_ankibrain_completed_install():
+            setup = QPushButton('One-time setup: install the study engine…')
+            setup.clicked.connect(show_install_dialog)
+            layout.addWidget(setup)
 
         common = QFormLayout()
         self.provider = QComboBox()
-        for name, label in [('chatgpt', 'ChatGPT — native browser sign-in (experimental)'),
+        for name, label in [('chatgpt', 'ChatGPT — sign in (recommended)'),
                             ('openai', 'OpenAI-compatible API — Gemini, Grok, and custom endpoints')]:
             self.provider.addItem(label, name)
-        common.addRow('Provider', self.provider)
+        common.addRow('Connect using', self.provider)
+        layout.addLayout(common)
+        self.more_options = QWidget()
+        options_form = QFormLayout(self.more_options)
         self.timeout = QSpinBox()
         self.timeout.setRange(1, 3600)
         self.timeout.setValue(self.config['timeout_seconds'])
         self.timeout.setSuffix(' seconds')
-        common.addRow('Socket-operation timeout', self.timeout)
+        options_form.addRow('Socket-operation timeout', self.timeout)
         self.chunk_size = QSpinBox()
         self.chunk_size.setRange(100, 100000)
         self.chunk_size.setValue(self.config['document_chunk_size'])
         self.chunk_size.setSuffix(' characters')
-        common.addRow('Document-to-cards chunk size', self.chunk_size)
-        layout.addLayout(common)
+        options_form.addRow('Document-to-cards chunk size', self.chunk_size)
 
         self.pages = QStackedWidget()
         page = QWidget()
@@ -50,14 +57,14 @@ class AIProviderDialog(QDialog):
         model.setCurrentText(self.config['providers']['chatgpt']['model'])
         self.inputs['chatgpt'] = {'model': model}
         form.addRow('Model ID', model)
-        self._line(form, 'chatgpt', 'auth_dir', 'Private sign-in directory', 'Blank = user_files/provider_auth/chatgpt')
+        self._line(options_form, 'chatgpt', 'auth_dir', 'Private ChatGPT sign-in directory', 'Blank = default private location')
         self.inputs['chatgpt']['auth_dir'].textChanged.connect(self._update_auth_state)
         effort = QComboBox()
         for level in ('', 'minimal', 'low', 'medium', 'high', 'xhigh'):
             effort.addItem(level or 'Provider default', level)
         effort.setCurrentIndex(effort.findData(self.config['providers']['chatgpt']['effort']))
         self.inputs['chatgpt']['effort'] = effort
-        form.addRow('Reasoning effort', effort)
+        options_form.addRow('ChatGPT reasoning effort', effort)
         self.auth_state = QLabel()
         form.addRow(self.auth_state)
         for label, action in [('Sign in with ChatGPT…', self._login_chatgpt),
@@ -66,11 +73,13 @@ class AIProviderDialog(QDialog):
             button = QPushButton(label)
             button.clicked.connect(action)
             form.addRow(button)
-        help_text = QLabel('Sign in on OpenAI’s website in your normal browser; no API key or CLI is required. '
-                           'The callback stays on this computer. Uses the ChatGPT-backed Codex Responses service, '
-                           'not the chatgpt.com conversation interface; account/model limits and extra usage may apply. '
-                           'This experimental compatibility endpoint can change. No automatic API fallback. '
-                           'Sign-in/out takes effect immediately, independently of Save. Closing this dialog cancels a pending login.')
+            if action == self._login_chatgpt:
+                self.login_button = button
+                button.setMinimumHeight(44)
+        help_text = QLabel('1. Sign in in your browser.\n2. Review your account model above.\n3. Save & start studying.\n\n'
+                           'Experimental ChatGPT-backed Codex connection; plan/model limits apply. '
+                           'Prompts and document excerpts go to your selected provider. '
+                           'No API-key fallback. Sign-in/out takes effect immediately, independently of Save.')
         help_text.setWordWrap(True)
         form.addRow(help_text)
         self.pages.addWidget(page)
@@ -113,6 +122,11 @@ class AIProviderDialog(QDialog):
         scroll.setWidgetResizable(True)
         scroll.setWidget(self.pages)
         layout.addWidget(scroll)
+        more = QCheckBox('More connection options')
+        more.toggled.connect(self.more_options.setVisible)
+        layout.addWidget(more)
+        layout.addWidget(self.more_options)
+        self.more_options.hide()
         self.provider.currentIndexChanged.connect(self.pages.setCurrentIndex)
         self.provider.setCurrentIndex(self.provider.findData(self.config['provider']))
         self.pages.setCurrentIndex(self.provider.currentIndex())
@@ -125,6 +139,7 @@ class AIProviderDialog(QDialog):
         buttons.accepted.connect(self._save)
         buttons.rejected.connect(self.reject)
         self.save_button = buttons.button(QDialogButtonBox.StandardButton.Save)
+        self.save_button.setText('Save & start studying')
         self.test_button = buttons.addButton('Test (uses quota)', QDialogButtonBox.ButtonRole.ActionRole)
         self.test_button.clicked.connect(self._test)
         layout.addWidget(buttons)
@@ -174,7 +189,7 @@ class AIProviderDialog(QDialog):
         self.accept()
 
     def _background(self, work, success):
-        widgets = (self.provider, self.pages, self.save_button, self.test_button)
+        widgets = (self.provider, self.pages, self.more_options, self.save_button, self.test_button)
         for widget in widgets:
             widget.setEnabled(False)
 
@@ -215,7 +230,7 @@ class AIProviderDialog(QDialog):
         except (ValueError, OSError):
             self.auth_state.setText('Check the private sign-in directory.')
         else:
-            self.auth_state.setText('Stored sign-in found (Test to verify access).' if present else 'Not signed in.')
+            self.auth_state.setText('Signed in on this computer. Test to verify model access.' if present else 'Sign in to connect your ChatGPT account.')
 
     def _login_chatgpt(self):
         try:
@@ -227,8 +242,25 @@ class AIProviderDialog(QDialog):
         if not QDesktopServices.openUrl(QUrl(flow.url)):
             flow.cancel()
         self.auth_state.setText('Waiting for browser sign-in (up to five minutes)…')
-        self._background(flow.finish, lambda _: QMessageBox.information(
-            self, 'ChatGPT signed in', 'Sign-in saved locally. Load account models, choose your model, then Test and Save.'))
+        options = self._auth_options()
+
+        def connect():
+            flow.finish()
+            try:
+                return ChatGPTAuth.models(options), ''
+            except (ValueError, RuntimeError, OSError) as error:
+                return [], str(error)
+
+        def connected(result):
+            names, error = result
+            if names:
+                self._set_models(names, choose_available=True)
+                QMessageBox.information(self, 'ChatGPT connected', 'Your account models are ready. Review the selected model, then click Save & start studying.')
+            else:
+                QMessageBox.warning(self, 'Signed in; model list unavailable',
+                                    error + '\nUse Load account models to retry, or enter a known model ID.')
+
+        self._background(connect, connected)
 
     def _logout_chatgpt(self):
         if QMessageBox.question(self, 'Sign out locally',
@@ -240,14 +272,15 @@ class AIProviderDialog(QDialog):
     def _load_models(self):
         options = self._auth_options()
 
-        def loaded(names):
-            widget = self.inputs['chatgpt']['model']
-            selected = widget.currentText()
-            widget.clear()
-            widget.addItems(names)
-            widget.setCurrentText(selected)  # Never silently switch model/price tier.
+        self._background(lambda: ChatGPTAuth.models(options), self._set_models)
 
-        self._background(lambda: ChatGPTAuth.models(options), loaded)
+    def _set_models(self, names, choose_available=False):
+        widget = self.inputs['chatgpt']['model']
+        selected = widget.currentText()
+        widget.clear()
+        widget.addItems(names)
+        # On login, offer an available model for review; it is not used until Save.
+        widget.setCurrentText(names[0] if choose_available and selected not in names else selected)
 
     def _apply_preset(self):
         label = self.preset.currentText()

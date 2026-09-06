@@ -1,4 +1,4 @@
-# Local AI providers — native authentication, no provider CLIs
+# Connect your AI — native authentication, no provider CLIs
 
 | Option in this build | Authentication | Usage / billing |
 | --- | --- | --- |
@@ -10,11 +10,11 @@
 
 **No Codex, Claude Code, Gemini, Grok, or Copilot CLI is installed, invoked, or required by these providers.** The older Codex/Claude CLI adapters have been removed. The existing external Python document engine is still required; it is not an AI-provider CLI.
 
-These settings affect **Local mode only**, not Regular/Server mode. Local means document handling and embeddings run on your computer, not that the language model is offline. Prompts, conversation history, and retrieved document excerpts go to your chosen service. Switching providers retains that history: clear the conversation before switching if you do not want to share it with the next provider.
+**There is no Local/Server choice anymore.** Every study feature uses your selected provider. Document handling and embeddings run on your computer; this does not mean the language model is offline. Prompts, conversation history, and retrieved document excerpts go to your chosen service. Switching providers retains that history: clear the conversation before switching if you do not want to share it with the next provider.
 
 ## 1. Open settings
 
-Complete the add-on's [installation and Local-mode dependency setup](README.md), then open **AnkiBrain → AI Provider Settings…**, also available under **Settings → Advanced** in the side panel.
+Click **Sign in with ChatGPT** on the welcome screen, or open **AnkiBrain → Connect AI…**. The connection is also directly accessible in the header and **Settings**, not an Advanced tab. You can sign in before finishing the one-time [Python study-engine setup](README.md#install-the-python-study-engine-once).
 
 - Settings apply to the next request after **Save**. In-flight requests retain their original configuration.
 - **Test (uses quota)** sends a real short prompt using unsaved settings. It does not save them.
@@ -23,13 +23,13 @@ Complete the add-on's [installation and Local-mode dependency setup](README.md),
 
 ## 2. Native ChatGPT sign-in
 
-1. Select **ChatGPT — native browser sign-in (experimental)**.
-2. Leave **Private sign-in directory** blank for the default, or enter an absolute directory dedicated to this account.
+1. Click **Sign in with ChatGPT**, the default connection.
+2. Normally leave connection options unchanged. If needed, **More connection options** exposes the private sign-in directory; blank uses the default, or enter an absolute directory dedicated to this account.
 3. Click **Sign in with ChatGPT…**. Your normal browser opens OpenAI's authentication site. Check that it is `https://auth.openai.com`; enter credentials there, never into AnkiBrain, a terminal, or this repository.
 4. Complete sign-in and return to Anki. The callback listens only on localhost, using port 1455 or 1457. Keep the browser and Anki on the same machine. This build does not provide a remote/headless/device-code login flow.
-5. Click **Load account models**, then select an available model. The editable list preserves your existing choice rather than silently switching price tiers. The default `gpt-5.6-luna` is only a starting value, not a promise of access; choose from your account's catalog or enter a known exact ID.
-6. Optionally select **Reasoning effort**, subject to your model's supported levels. Blank uses the service default.
-7. Click **Test (uses quota)** and **Save**. No OpenAI API key is needed.
+5. Account models load automatically after sign-in. An available current choice is preserved; otherwise the first available model is selected **for your review before Save**. Check the model and its quota/price. **Load account models** retries discovery without changing your current selection, and the list remains editable for known exact IDs. A starting default is not a promise of model access.
+6. **More connection options** contains optional reasoning effort, private auth directory, timeout, and document chunk size. Provider defaults work unless your model requires otherwise.
+7. Optionally **Test (uses quota)**, then **Save & start studying**. No OpenAI API key is needed.
 
 Closing the dialog cancels a pending login. Sign-in expires after five minutes; close other pending login windows if both callback ports are occupied. **Sign out locally…** deletes this add-on's cached credentials. It does not revoke other OpenAI sessions or cancel already-running requests. Manage account-wide sessions through OpenAI separately.
 
@@ -152,12 +152,12 @@ The private settings file is **`user_files/ai_providers.json`**, saved atomicall
 ```
 
 - Missing optional fields receive defaults; malformed JSON, unknown fields, and invalid values fail visibly. Only `chatgpt` and `openai` are runnable providers. Old `codex`/`claude` selectors require explicit migration through Settings.
-- Provider settings replace the local use of the old webview `llmModel`/`temperature` controls; those now belong to Server mode. Legacy `ANKIBRAIN_CODEX_*`, `CODEX_HOME`, and `CLAUDE_CONFIG_DIR` variables have no effect.
+- Provider settings replace the old webview `llmModel`/`temperature` controls. Obsolete Local/Server settings and server account credentials are ignored, not sent to any server. Legacy `ANKIBRAIN_CODEX_*`, `CODEX_HOME`, and `CLAUDE_CONFIG_DIR` variables have no effect.
 - `${NAME}` expansion applies only to API-key/header values. `.env` overrides process environment variables. Missing references fail before sending anything. Provider config and `.env` reload on each request.
 - Networking uses standard Python TLS/proxy configuration from the process environment. Proxies must be trusted; certificate verification is never disabled.
 - Timeout (1–3,600 seconds) is a **socket-operation** timeout, not a total request deadline. A slow stream can last longer. OAuth/model-catalog operations use 30-second socket timeouts; interactive sign-in waits up to five minutes, plus an in-progress token exchange.
 - Document-to-cards chunk size (100–100,000 characters) is not a token count or retrieval-embedding setting. Reduce it for context/response limits. Native streaming responses have 1 MiB per-line and 16 MiB total transport limits.
-- Local cost says **Provider-billed**, not `$0`. Consult your provider dashboard for actual credits, charges, and limits.
+- The header shows your connection, not an AnkiBrain balance. Consult your provider dashboard for actual credits, charges, and limits.
 
 ## 7. Verification and troubleshooting
 
@@ -165,11 +165,13 @@ Offline checks, with no live accounts/charges:
 
 ```sh
 python3 tests/test_ai_providers.py
-# Optional, using the installed Local-mode environment:
+# Optional, using the installed study-engine environment:
 user_files/venv/bin/python tests/test_ai_providers.py --runtime
 ```
 
-These cover config migration/persistence, private credentials, real localhost OAuth callbacks, PKCE/state validation, token refresh races, direct HTTP/SSE, no provider process launches, secret-safe errors, redirect refusal, API headers, IPC serialization, and (with `--runtime`) Qt and LangChain integration.
+These cover config migration/persistence, private credentials, real localhost OAuth callbacks, PKCE/state validation, token refresh races, direct HTTP/SSE, no provider process launches, secret-safe errors, redirect refusal, API headers, and IPC serialization. Streamed text is retained even if the completed event's output is empty, without duplicating snapshots or accepting incomplete output. `--runtime` also checks Qt sign-in actions, first-run/old-Server startup, and real chat/explanation/basic-card/cloze-card/document-answer classes against mocked native HTTP responses.
+
+Frontend checks: `cd webview && CI=true npm test -- --watchAll=false --runInBand`.
 
 A real smoke test **uses the selected account's quota/billing**:
 
@@ -184,9 +186,10 @@ Windows uses `user_files\venv\Scripts\python.exe`. Optional `--config /absolute/
 - **Callback unavailable:** close other pending logins; allow localhost ports 1455/1457. Browser and Anki must run on the same machine.
 - **403 / 404 / 429:** check account access, model/endpoint, or quota respectively. Model catalog availability is not proof of unlimited/free use.
 - **HTML / wrong response format:** an API base URL must point to a compatible API, not a consumer website.
-- **Local engine/dependency failure:** complete Local-mode installation. Native auth does not remove the legacy document/embedding dependencies or their initial model download.
+- **AI provider returned no text in providers.2:** upgrade to providers.3 or later, restart Anki, and retry Test. The previous parser discarded answers delivered only in stream events. If it still fails, report the add-on version, chosen model, and exact error—never tokens or session files.
+- **Study-engine/dependency failure:** use **AnkiBrain → Set Up / Repair Study Engine…** and the [setup guide](README.md#install-the-python-study-engine-once). Native auth does not remove the document/embedding dependencies or their initial model download. Working environments do not need reinstalling for providers.3.
 
-Validation is offline/local-server testing, Python 3.9 LangChain/Qt integration, and the webview build. **The new browser OAuth flow has not yet been completed against a real account, nor tested in a full running-Anki session.** Live endpoint access, model compatibility, billing, and other operating systems still need user verification. Earlier release tests of a Codex CLI request do not validate this new native implementation.
+Validation includes offline/local-server testing, Python 3.9 LangChain/Qt integration, frontend tests, and the webview build. **A user has reported successful native sign-in/model discovery, but live generation after the streaming fix still requires user verification.** Full running-Anki compatibility, billing, and other operating systems remain unverified here. Earlier release tests of a Codex CLI request do not validate the native implementation.
 
 ## Primary references
 

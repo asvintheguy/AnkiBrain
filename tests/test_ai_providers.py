@@ -247,6 +247,9 @@ def main():
                         future.set_result(work())
                         done(future)
                         assert info.called and dialog.save_button.isEnabled()
+                        assert dialog.inputs['chatgpt']['model'].currentText() == 'account-model'
+                        assert dialog.more_options.isHidden()
+                        assert dialog.save_button.text() == 'Save & start studying'
                         dialog.inputs['chatgpt']['model'].setCurrentText('keep-my-model')
                         dialog._load_models()
                         work, done = pending.pop()
@@ -264,6 +267,60 @@ def main():
                         info.reset_mock()
                         done(future)
                         info.assert_not_called()
+
+                # First-run and old SERVER settings use the same app; failed engine setup still exposes sign-in.
+                from unittest.mock import AsyncMock, Mock
+                aqt.mw = types.SimpleNamespace(CURRENT_VERSION='test-version')
+                aqt.gui_hooks = types.SimpleNamespace()
+                hooks = types.ModuleType('anki.hooks')
+                hooks.addHook = Mock()
+                utils = types.ModuleType('aqt.utils')
+                utils.showInfo = Mock()
+                placeholders = {
+                    'anki': types.ModuleType('anki'), 'anki.hooks': hooks, 'aqt.utils': utils,
+                    'SidePanel': types.SimpleNamespace(SidePanel=Mock()),
+                    'ExplainTalkButtons': types.SimpleNamespace(ExplainTalkButtons=Mock()),
+                    'card_injection': types.SimpleNamespace(handle_card_will_show=Mock()),
+                    'changelog': types.SimpleNamespace(ChangelogDialog=Mock()),
+                    'cards': types.SimpleNamespace(add_basic_card=Mock(), add_cloze_card=Mock()),
+                }
+                with patch.dict(sys.modules, placeholders):
+                    import AnkiBrainModule as host
+                    import settings
+                    import project_paths
+                    import boot
+                    legacy_path = folder / 'legacy-settings.json'
+                    legacy = {'user_mode': 'SERVER', 'user': {'accessToken': 'SECRET'},
+                              'tempCards': [{'front': 'Keep this card', 'back': 'Saved'}]}
+                    legacy_path.write_text(json.dumps(legacy), encoding='utf-8')
+                    with patch.object(project_paths, 'settings_path', str(legacy_path)), patch.object(host, 'AnkiBrain') as constructor:
+                        boot.load_ankibrain()
+                        constructor.assert_called_once_with()
+                    assert aqt.mw.settingsManager.get('tempCards') == legacy['tempCards']
+                    assert 'user_mode' not in settings.default_settings and 'user' not in settings.default_settings
+                    state = types.SimpleNamespace(webview_loaded=True, chatReady=False, startup_error='',
+                                                  chatAI=types.SimpleNamespace(start=AsyncMock(), stop=AsyncMock()), reactBridge=Mock())
+                    state.notify_ai_settings_changed = lambda: host.AnkiBrain.notify_ai_settings_changed(state)
+                    state.load_user_settings = lambda: host.AnkiBrain.load_user_settings(state)
+                    with patch.object(host, 'load_config', return_value=copy.deepcopy(ai.DEFAULT_CONFIG)), patch.object(host, 'signed_in', return_value=False):
+                        for error in (FileNotFoundError(), None):
+                            state.chatAI.start.side_effect = error
+                            state.reactBridge.reset_mock()
+                            asyncio.run(host.AnkiBrain._start_async_members(state))
+                            assert state.chatReady == (error is None)
+                            state.reactBridge.send_cmd.assert_any_call(IC.DID_FINISH_STARTUP)
+                            public = state.reactBridge.send_to_js.call_args[0][0]['data']
+                            assert public['provider'] == 'chatgpt' and not public['configured']
+                            assert public['engineReady'] == (error is None)
+                            assert 'SECRET' not in str(state.reactBridge.mock_calls)
+                    from ReactBridge import ReactBridge
+                    bridge = ReactBridge.__new__(ReactBridge)
+                    bridge.app = types.SimpleNamespace(chatAI=types.SimpleNamespace(
+                        ask_conversation_no_documents=AsyncMock(side_effect=RuntimeError('No completed answer'))))
+                    bridge.send_cmd = Mock()
+                    asyncio.run(bridge.a_handle_react_data_received({'cmd': 'ASK_CONVERSATION_NO_DOCUMENTS', 'query': 'hello', 'commandId': 27}))
+                    assert bridge.send_cmd.call_args[0][0] == IC.ERROR
+                    assert bridge.send_cmd.call_args[1] == {'commandId': 27, 'error': 'No completed answer'}
 
     print('AI provider checks passed' + (' (including LangChain + Qt)' if '--runtime' in sys.argv else ''))
 
