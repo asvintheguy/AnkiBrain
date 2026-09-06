@@ -1,4 +1,4 @@
-VERSION = '1.0.0-providers.1'
+VERSION = '1.0.0-providers.2'
 
 import os
 import sys

@@ -50,7 +50,7 @@ class UserModeDialog(QDialog):
             <html>
                 <p>For advanced users. Sets up AI Engine on your local computer. Speeds can be slow.</p>
                 <ul>
-                    <li>Use ChatGPT / Claude subscriptions via official CLIs, or an OpenAI-compatible API (including Gemini)</li>
+                    <li>Use native ChatGPT sign-in, or an OpenAI-compatible API (including Gemini and Grok); no provider CLI required</li>
                     <li>Configure providers under AnkiBrain → AI Provider Settings</li>
                     <li>Prompts and document excerpts are sent to your selected provider</li>
                     <li>Setup may be difficult</li>

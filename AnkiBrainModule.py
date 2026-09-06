@@ -159,7 +159,7 @@ class AnkiBrain:
             config = load_config()
             provider = config['provider']
             options = config['providers'][provider]
-            model = f"{provider}: {options['model'] or 'CLI default'}"
+            model = f"{provider}: {options['model']}"
             temperature = options.get('temperature')
         except (ValueError, OSError):
             model, temperature = 'Local AI (check configuration)', None

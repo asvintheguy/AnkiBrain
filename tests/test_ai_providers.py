@@ -45,7 +45,7 @@ def main():
                                  capture_output=True, text=True, timeout=5)
         assert missing.returncode != 0 and 'does not exist' in missing.stderr
         with patch.object(ai, 'USER_FILES', folder), patch.dict(os.environ, {'ANKIBRAIN_CODEX_TIMEOUT': '91'}):
-            assert ai.load_config(config_file)['timeout_seconds'] == 91
+            assert ai.load_config(config_file)['timeout_seconds'] == 600  # Removed CLI environment settings are ignored.
             ai.save_config(config, config_file)
             assert ai.load_config(config_file) == config
             if os.name != 'nt':
@@ -57,10 +57,22 @@ def main():
             assert config_file.read_bytes() == previous
             config_file.write_text('{', encoding='utf-8')
             fails(lambda: ai.load_config(config_file), 'Cannot read')
-            config_file.write_text('{"provider":"claude","providers":{"claude":{"model":"opus"}}}', encoding='utf-8')
-            loaded = ai.load_config(config_file)
-            assert loaded['providers']['claude']['model'] == 'opus'
-            assert loaded['providers']['codex'] == config['providers']['codex']
+            for removed in ('codex', 'claude'):
+                legacy = {'provider': removed, 'providers': {removed: {'model': 'old-model', 'cli_path': '/unused'},
+                                                            'openai': {'model': 'api-model', 'api_key': 'SECRET'}}}
+                config_file.write_text(json.dumps(legacy), encoding='utf-8')
+                before = config_file.read_bytes()
+                fails(lambda: ai.load_config(config_file), 'CLI providers were removed')
+                loaded = ai.load_config(config_file, allow_legacy=True)
+                assert loaded['provider'] == 'chatgpt' and set(loaded['providers']) == {'chatgpt', 'openai'}
+                assert loaded['providers']['openai']['api_key'] == 'SECRET'
+                assert loaded['providers']['chatgpt']['model'] == ('old-model' if removed == 'codex' else config['providers']['chatgpt']['model'])
+                assert config_file.read_bytes() == before  # Migration requires an explicit Save.
+                ai.save_config(loaded, config_file)
+                assert ai.load_config(config_file) == loaded
+            legacy['provider'] = 'openai'
+            config_file.write_text(json.dumps(legacy), encoding='utf-8')
+            assert ai.load_config(config_file)['provider'] == 'openai'
 
         for key, bad in [('provider', 'bogus'), ('provider', []), ('timeout_seconds', True),
                          ('document_chunk_size', 0)]:
@@ -78,8 +90,10 @@ def main():
             invalid = copy.deepcopy(config)
             invalid['providers']['openai'][key] = bad
             fails(lambda: ai.validate_config(invalid))
-        fails(lambda: ai.run_provider(''), 'prompt')
-        fails(lambda: ai.run_provider('hi', stop=['']), 'Stop')
+        fails(lambda: ai.run_provider('', config=config), 'prompt')
+        fails(lambda: ai.run_provider('hi', stop=[''], config=config), 'Stop')
+        assert set(ai.DEFAULT_CONFIG['providers']) == {'chatgpt', 'openai'}
+        assert not hasattr(ai, 'run_codex') and not hasattr(ai, 'run_claude') and not hasattr(ai, '_run_cli')
 
         calls = []
         reply = {'choices': [{'message': {'content': 'answer STOP later END'}, 'finish_reason': 'stop'}]}
@@ -159,44 +173,8 @@ def main():
             server.server_close()
             thread.join()
 
-        cli_calls = []
-
-        def fake_cli(command, prompt, workdir, environment, timeout):
-            cli_calls.append((command, environment, timeout))
-            assert prompt == 'hello'
-            assert not any(key in environment for key in ('OPENAI_API_KEY', 'ANTHROPIC_API_KEY', 'NODE_OPTIONS'))
-            assert not Path(workdir).samefile(ROOT)
-            if '--output-last-message' in command:
-                Path(command[command.index('--output-last-message') + 1]).write_text('hello STOP secret', encoding='utf-8')
-                return ''
-            return '{"subtype":"success","is_error":false,"result":"hello STOP secret"}'
-
-        with patch.object(ai, '_run_cli', side_effect=fake_cli), patch.object(ai, '_resolve_cli', return_value=sys.executable):
-            for provider in ('codex', 'claude'):
-                config['provider'] = provider
-                config['providers'][provider].update(model='chosen-model', config_dir=str(folder), effort='low')
-                with patch.dict(os.environ, {'OPENAI_API_KEY': 'SECRET', 'ANTHROPIC_API_KEY': 'SECRET', 'NODE_OPTIONS': 'SECRET'}):
-                    assert ai.run_provider('hello', stop=['STOP'], config=config) == 'hello'
-                command, env, timeout = cli_calls[-1]
-                assert command[command.index('--model') + 1] == 'chosen-model'
-                assert timeout == config['timeout_seconds']
-                if provider == 'codex':
-                    assert '--ignore-user-config' in command and 'forced_login_method="chatgpt"' in command
-                    assert 'features.apps=false' in command and 'web_search="disabled"' in command
-                    assert '"deny"' in ai._permission_profile(sys.executable)
-                    assert env['CODEX_HOME'] == str(folder)
-                else:
-                    assert '--safe-mode' in command and '--restricted' in command and '--bare' not in command
-                    assert command[command.index('--tools') + 1] == ''
-                    assert command[command.index('--disallowedTools') + 1] == '*'
-                    assert '--strict-mcp-config' in command and 'disableAllHooks' in ' '.join(command)
-                    assert env['CLAUDE_CONFIG_DIR'] == str(folder)
-        assert ai._run_cli([sys.executable, '-c', 'import sys; print(sys.stdin.read())'],
-                           'hello λ', directory, dict(os.environ), 5).strip() == 'hello λ'
-        fails(lambda: ai._run_cli([sys.executable, '-c', 'import time; time.sleep(10)'],
-                                 '', directory, dict(os.environ), 0.1), 'timed out')
-        fails(lambda: ai._run_cli([sys.executable, '-c', 'import sys; print("SECRET", file=sys.stderr); sys.exit(3)'],
-                                 '', directory, dict(os.environ), 5), 'code 3')
+        from test_chatgpt_auth import check_auth
+        check_auth()
 
         # Exercise the shared IPC serialization path with concurrent, slow requests.
         worker = folder / 'worker.py'
@@ -231,13 +209,61 @@ def main():
                     dialog = dialog_module.AIProviderDialog()
                     assert dialog._collect() == config
                     assert dialog.inputs['openai']['api_key'].echoMode() == QtWidgets.QLineEdit.EchoMode.Password
-                    dialog.provider.setCurrentIndex(dialog.provider.findData('codex'))
-                    dialog.inputs['codex']['model'].setText('new-model')
+                    assert dialog.provider.count() == 2 and dialog.provider.findData('claude') == -1
+                    dialog.provider.setCurrentIndex(dialog.provider.findData('chatgpt'))
+                    dialog.inputs['chatgpt']['model'].setCurrentText('new-model')
                     dialog._save()
                     saved = save.call_args[0][0]
-                    assert saved['provider'] == 'codex' and saved['providers']['codex']['model'] == 'new-model'
+                    assert saved['provider'] == 'chatgpt' and saved['providers']['chatgpt']['model'] == 'new-model'
                     assert saved['providers']['openai'] == config['providers']['openai']
                     dialog.close()
+                    dialog = dialog_module.AIProviderDialog()
+                    with patch.object(QtWidgets.QMessageBox, 'question', return_value=QtWidgets.QMessageBox.StandardButton.Yes):
+                        for label, (base, variable, model) in ai.API_PRESETS.items():
+                            dialog.preset.setCurrentText(label)
+                            dialog._apply_preset()
+                            fields = dialog.inputs['openai']
+                            assert fields['base_url'].text() == base and fields['api_key'].text() == '${' + variable + '}'
+                            assert fields['model'].text() == model
+                            assert fields['headers'].toPlainText() == '{}' and not fields['allow_insecure_http'].isChecked()
+                    dialog.close()
+
+                    # Exercise native sign-in/model actions and cancellation without a browser/account.
+                    from concurrent.futures import Future
+                    from unittest.mock import Mock
+                    pending = []
+                    taskman = types.SimpleNamespace(run_in_background=lambda work, done: pending.append((work, done)))
+                    flow = Mock(url='https://auth.openai.com/oauth/authorize', finish=Mock(return_value=None))
+                    with patch.object(dialog_module, 'mw', types.SimpleNamespace(taskman=taskman)), \
+                            patch.object(dialog_module.ChatGPTAuth, 'Login', return_value=flow), \
+                            patch.object(dialog_module.ChatGPTAuth, 'models', return_value=['account-model']), \
+                            patch.object(QtGui.QDesktopServices, 'openUrl', return_value=True), \
+                            patch.object(QtWidgets.QMessageBox, 'information') as info:
+                        dialog = dialog_module.AIProviderDialog()
+                        dialog._login_chatgpt()
+                        assert not dialog.save_button.isEnabled()
+                        work, done = pending.pop()
+                        future = Future()
+                        future.set_result(work())
+                        done(future)
+                        assert info.called and dialog.save_button.isEnabled()
+                        dialog.inputs['chatgpt']['model'].setCurrentText('keep-my-model')
+                        dialog._load_models()
+                        work, done = pending.pop()
+                        future = Future()
+                        future.set_result(work())
+                        done(future)
+                        assert dialog.inputs['chatgpt']['model'].currentText() == 'keep-my-model'
+                        assert dialog.inputs['chatgpt']['model'].findText('account-model') >= 0
+                        dialog._login_chatgpt()
+                        dialog.reject()
+                        flow.cancel.assert_called_once()
+                        work, done = pending.pop()
+                        future = Future()
+                        future.set_result(None)
+                        info.reset_mock()
+                        done(future)
+                        info.assert_not_called()
 
     print('AI provider checks passed' + (' (including LangChain + Qt)' if '--runtime' in sys.argv else ''))
 

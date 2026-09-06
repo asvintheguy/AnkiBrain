@@ -29,7 +29,7 @@ def main():
             files.add(path)
     files.update(path.relative_to(ROOT) for path in (ROOT / 'webview/build').rglob('*') if path.is_file())
     required = {'__init__.py', 'manifest.json', 'InterprocessCommand.py', 'AIProviderDialog.py',
-                'ChatAI/AIProviders.py', 'ChatAI/ProviderLLM.py', 'webview/build/index.html',
+                'ChatAI/AIProviders.py', 'ChatAI/ChatGPTAuth.py', 'ChatAI/ProviderLLM.py', 'webview/build/index.html',
                 'webview/build/asset-manifest.json', 'user_files/bundled_dependencies/dotenv/__init__.py'}
     names = {path.as_posix() for path in files}
     if not required <= names:

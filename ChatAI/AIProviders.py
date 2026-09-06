@@ -4,11 +4,9 @@ import json
 import math
 import os
 import re
-import shutil
-import signal
-import subprocess
 import tempfile
 from pathlib import Path
+from http.client import HTTPException
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit
 from urllib.request import HTTPRedirectHandler, Request, build_opener
@@ -16,12 +14,11 @@ from urllib.request import HTTPRedirectHandler, Request, build_opener
 USER_FILES = Path(__file__).resolve().parent.parent / 'user_files'
 CONFIG_PATH = USER_FILES / 'ai_providers.json'
 DEFAULT_CONFIG = {
-    'provider': 'codex',
+    'provider': 'chatgpt',
     'timeout_seconds': 600,
     'document_chunk_size': 6000,
     'providers': {
-        'codex': {'model': '', 'cli_path': '', 'config_dir': '', 'effort': ''},
-        'claude': {'model': 'sonnet', 'cli_path': '', 'config_dir': '', 'effort': ''},
+        'chatgpt': {'model': 'gpt-5.6-luna', 'auth_dir': '', 'effort': ''},
         'openai': {
             'model': '',
             'base_url': 'https://api.openai.com/v1',
@@ -34,36 +31,44 @@ DEFAULT_CONFIG = {
         },
     },
 }
+# Presets select endpoints, not billing entitlements. No client impersonation headers.
+API_PRESETS = {
+    'Gemini API — eligible free tier / API billing': ('https://generativelanguage.googleapis.com/v1beta/openai', 'GEMINI_API_KEY', ''),
+    'Grok / xAI API — separate API billing': ('https://api.x.ai/v1', 'XAI_API_KEY', ''),
+    'OpenAI API — separate API billing': ('https://api.openai.com/v1', 'OPENAI_API_KEY', ''),
+    'OpenRouter — endpoint billing': ('https://openrouter.ai/api/v1', 'OPENROUTER_API_KEY', ''),
+    'DeepSeek API — endpoint billing': ('https://api.deepseek.com/v1', 'DEEPSEEK_API_KEY', 'deepseek-chat'),
+    'Kimi Open Platform — API billing, not Kimi membership': ('https://api.moonshot.ai/v1', 'MOONSHOT_API_KEY', ''),
+}
 TEXT_INSTRUCTIONS = (
     "Act only as AnkiBrain's text-generation backend. Answer the supplied prompt directly. "
     'Do not inspect files, run commands, browse the web, or use tools.'
 )
 
 
-def load_config(config_path=CONFIG_PATH):
+def load_config(config_path=CONFIG_PATH, *, allow_legacy=False):
     config = copy.deepcopy(DEFAULT_CONFIG)
     try:
         with open(config_path, encoding='utf-8') as stream:
             saved = json.load(stream)
     except FileNotFoundError:
-        # Preserve settings from the initial Codex integration, without making the
-        # server-mode model selector control other local providers.
-        legacy = USER_FILES / 'settings.json'
-        if legacy.is_file():
-            with legacy.open(encoding='utf-8') as stream:
-                config['providers']['codex']['model'] = json.load(stream).get('llmModel', '')
-        environment = _environment()
-        config['providers']['codex']['cli_path'] = environment.get('ANKIBRAIN_CODEX_CLI', '')
-        try:
-            config['timeout_seconds'] = int(environment.get('ANKIBRAIN_CODEX_TIMEOUT', '600'))
-        except ValueError:
-            raise ValueError('ANKIBRAIN_CODEX_TIMEOUT must be an integer.') from None
         validate_config(config)
         return config
     except (ValueError, OSError):
         raise ValueError('Cannot read ai_providers.json. Fix the JSON or restore your backup.') from None
     if not isinstance(saved, dict) or not isinstance(saved.get('providers', {}), dict):
         raise ValueError('AI configuration and providers must be JSON objects.')
+    if saved.get('provider') in ('codex', 'claude'):
+        if not allow_legacy:
+            raise ValueError('CLI providers were removed. Open AI Provider Settings, choose a provider, sign in, and Save.')
+        if saved['provider'] == 'codex' and 'chatgpt' not in saved.get('providers', {}):
+            old = saved.get('providers', {}).get('codex', {})
+            if not isinstance(old, dict):
+                raise ValueError('Malformed old provider settings.')
+            config['providers']['chatgpt'].update({key: old[key] for key in ('model', 'effort') if old.get(key)})
+        saved['provider'] = 'chatgpt'  # Settings-dialog migration only; requests fail until explicitly saved.
+    for removed in ('codex', 'claude'):
+        saved.get('providers', {}).pop(removed, None)
     if set(saved) - set(config) or set(saved.get('providers', {})) - set(config['providers']):
         raise ValueError('Unknown AI configuration field or provider.')
     config.update({key: value for key, value in saved.items() if key != 'providers'})
@@ -79,7 +84,7 @@ def validate_config(config):
     if not isinstance(config, dict) or set(config) != set(DEFAULT_CONFIG):
         raise ValueError('Invalid AI configuration fields.')
     if not isinstance(config['provider'], str) or config['provider'] not in DEFAULT_CONFIG['providers']:
-        raise ValueError('Provider must be codex, claude, or openai.')
+        raise ValueError('Provider must be chatgpt or openai.')
     for key, low, high in [('timeout_seconds', 1, 3600), ('document_chunk_size', 100, 100000)]:
         if type(config[key]) is not int or not low <= config[key] <= high:
             raise ValueError(f'{key} must be an integer between {low} and {high}.')
@@ -95,10 +100,11 @@ def validate_config(config):
                 not isinstance(options[key], str) or any(ord(c) < 32 for c in options[key])
             ):
                 raise ValueError(f'{name}.{key} must be text without control characters.')
-    for name, efforts in [('codex', ('', 'minimal', 'low', 'medium', 'high', 'xhigh')),
-                          ('claude', ('', 'low', 'medium', 'high', 'xhigh', 'max'))]:
-        if providers[name]['effort'] not in efforts:
-            raise ValueError(f'Unsupported {name} effort level.')
+    if providers['chatgpt']['effort'] not in ('', 'minimal', 'low', 'medium', 'high', 'xhigh'):
+        raise ValueError('Unsupported ChatGPT effort level.')
+    auth_dir = providers['chatgpt']['auth_dir']
+    if auth_dir and not Path(auth_dir).expanduser().is_absolute():
+        raise ValueError('Private sign-in directory must be absolute, or blank for the default.')
     api = providers['openai']
     if type(api['allow_insecure_http']) is not bool:
         raise ValueError('allow_insecure_http must be true or false.')
@@ -119,8 +125,8 @@ def validate_config(config):
         json.dumps(config, allow_nan=False)
     except (TypeError, ValueError):
         raise ValueError('Configuration must contain valid JSON values.') from None
-    if config['provider'] == 'openai' and not api['model'].strip():
-        raise ValueError('An OpenAI-compatible model ID is required.')
+    if config['provider'] in ('openai', 'chatgpt') and not providers[config['provider']]['model'].strip():
+        raise ValueError('A model ID is required for this provider.')
 
 
 def validate_base_url(base_url, allow_http=False):
@@ -153,6 +159,10 @@ def validate_headers(headers):
 
 def save_config(config, config_path=CONFIG_PATH):
     validate_config(config)
+    _atomic_json(config, config_path)
+
+
+def _atomic_json(config, config_path):
     target = Path(config_path)
     target.parent.mkdir(parents=True, exist_ok=True)
     # Atomic replacement prevents the worker from reading a half-written secret file.
@@ -186,126 +196,13 @@ def _expand_secret(value, environment):
     return re.sub(r'\$\{([A-Za-z_][A-Za-z0-9_]*)\}', replace, value)
 
 
-def _resolve_cli(name, configured):
-    resolved = shutil.which(os.path.expanduser(configured or name))
-    if resolved is None:
-        raise RuntimeError(f'{name} CLI not found. Install it, sign in, then set its full CLI path in AI Provider Settings.')
-    return resolved
-
-
-def _cli_environment(cli, source):
-    # Do not forward API keys, provider overrides, injected Node options, or tools' environment.
-    allowed = ('HOME', 'USERPROFILE', 'APPDATA', 'LOCALAPPDATA', 'SYSTEMROOT', 'WINDIR',
-               'TEMP', 'TMP', 'TMPDIR', 'LANG', 'LC_ALL', 'HTTP_PROXY', 'HTTPS_PROXY',
-               'ALL_PROXY', 'NO_PROXY', 'http_proxy', 'https_proxy', 'all_proxy', 'no_proxy',
-               'SSL_CERT_FILE', 'SSL_CERT_DIR', 'NODE_EXTRA_CA_CERTS')
-    environment = {key: source[key] for key in allowed if source.get(key)}
-    environment['PATH'] = os.pathsep.join((str(Path(cli).parent), os.defpath))
-    return environment
-
-
-def _run_cli(command, prompt, workdir, environment, timeout):
-    try:
-        with subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                              stderr=subprocess.PIPE, text=True, encoding='utf-8', cwd=workdir,
-                              env=environment, start_new_session=os.name != 'nt',
-                              creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0) as process:
-            try:
-                stdout, stderr = process.communicate(prompt, timeout=timeout)
-            except BaseException as error:
-                if process.poll() is None:
-                    try:
-                        if os.name == 'nt':
-                            process.kill()
-                        else:
-                            os.killpg(process.pid, signal.SIGKILL)
-                    except ProcessLookupError:
-                        pass
-                process.communicate()
-                if isinstance(error, subprocess.TimeoutExpired):
-                    raise RuntimeError(f'AI CLI timed out after {timeout} seconds.') from None
-                raise
-    except OSError:
-        raise RuntimeError('Cannot launch AI CLI. Check the executable path and its runtime dependencies.') from None
-    if process.returncode:
-        # CLI diagnostics may echo prompts or credentials: never forward them into bridge logs.
-        raise RuntimeError(f'AI CLI exited with code {process.returncode}. Check CLI version, login, model, and quota in your terminal.')
-    return stdout
-
-
-def _permission_profile(codex_cli):
-    resolved = Path(codex_cli).resolve()
-    codex_root = resolved.parents[1] if resolved.suffix == '.js' else resolved.parent
-    return ('permissions.ankibrain={ filesystem = { ":root" = "deny", ":minimal" = "read", '
-            f'{json.dumps(str(codex_root))} = "read", ":workspace_roots" = {{ "." = "read" }} }}, '
-            'network = { enabled = false } }')
-
-
-def run_codex(prompt, options, timeout, environment):
-    cli = _resolve_cli('codex', options['cli_path'])
-    env = _cli_environment(cli, environment)
-    home = options['config_dir'] or environment.get('CODEX_HOME')
-    if home:
-        env['CODEX_HOME'] = os.path.abspath(os.path.expanduser(home))
-    with tempfile.TemporaryDirectory(prefix='ankibrain-codex-') as workdir:
-        output = Path(workdir) / 'response.txt'
-        command = [cli, '-a', 'never', 'exec', '-', '--ephemeral', '--ignore-user-config',
-                   '--ignore-rules', '--skip-git-repo-check', '--color', 'never',
-                   '--output-last-message', str(output), '-C', workdir]
-        overrides = ['forced_login_method="chatgpt"', 'default_permissions="ankibrain"',
-                     _permission_profile(cli), 'web_search="disabled"', 'tools.view_image=false',
-                     'history.persistence="none"', 'project_doc_max_bytes=0',
-                     f'developer_instructions={json.dumps(TEXT_INSTRUCTIONS)}']
-        for feature in ('shell_tool', 'unified_exec', 'multi_agent', 'apps', 'hooks', 'memories',
-                        'plugins', 'remote_plugin', 'browser_use', 'computer_use', 'image_generation',
-                        'view_image', 'skill_search', 'shell_snapshot', 'goals'):
-            overrides.append(f'features.{feature}=false')
-        if options['effort']:
-            overrides.append('model_reasoning_effort=' + json.dumps(options['effort']))
-        for override in overrides:
-            command.extend(('-c', override))
-        if options['model']:
-            command.extend(('--model', options['model']))
-        _run_cli(command, prompt, workdir, env, timeout)
-        if not output.is_file():
-            raise RuntimeError('Codex returned no final response.')
-        return output.read_text(encoding='utf-8')
-
-
-def run_claude(prompt, options, timeout, environment):
-    cli = _resolve_cli('claude', options['cli_path'])
-    env = _cli_environment(cli, environment)
-    home = options['config_dir'] or environment.get('CLAUDE_CONFIG_DIR')
-    if home:
-        env['CLAUDE_CONFIG_DIR'] = os.path.abspath(os.path.expanduser(home))
-    with tempfile.TemporaryDirectory(prefix='ankibrain-claude-') as workdir:
-        command = [cli, '--print', '--output-format', 'json', '--restricted',
-                   '--safe-mode', '--tools', '', '--disallowedTools', '*', '--permission-mode', 'dontAsk',
-                   '--strict-mcp-config', '--mcp-config', '{"mcpServers":{}}',
-                   '--setting-sources', '', '--settings', '{"disableAllHooks":true,"forceLoginMethod":"claudeai"}',
-                   '--disable-slash-commands', '--no-session-persistence', '--no-chrome',
-                   '--max-turns', '1', '--append-system-prompt', TEXT_INSTRUCTIONS]
-        if options['model']:
-            command.extend(('--model', options['model']))
-        if options['effort']:
-            command.extend(('--effort', options['effort']))
-        raw = _run_cli(command, prompt, workdir, env, timeout)
-    try:
-        result = json.loads(raw)
-        if result.get('is_error') or result.get('subtype') != 'success':
-            raise RuntimeError('Claude Code failed. Check subscription login, model access, and quota in your terminal.')
-        return result['result']
-    except (ValueError, TypeError, AttributeError, KeyError):
-        raise RuntimeError('Claude Code returned an invalid response; update the CLI.') from None
-
-
 class _NoRedirect(HTTPRedirectHandler):
     def redirect_request(self, req, fp, code, msg, headers, newurl):
         return None  # Never forward user-supplied authentication headers to a redirect target.
 
 
 def run_openai(prompt, options, timeout, environment):
-    headers = {'Content-Type': 'application/json', 'Accept': 'application/json'}
+    headers = {'Content-Type': 'application/json', 'Accept': 'application/json', 'User-Agent': 'AnkiBrain/1.0'}
     custom = {key: _expand_secret(value, environment) for key, value in options['headers'].items()}
     validate_headers(custom)
     if options['api_key'] and not any(key.lower() == 'authorization' for key in custom):
@@ -326,11 +223,12 @@ def run_openai(prompt, options, timeout, environment):
         with build_opener(_NoRedirect()).open(request, timeout=timeout) as response:
             result = json.load(response)
     except HTTPError as error:
+        error.close()
         hints = {401: 'Check credentials.', 403: 'Check credentials and model access.',
                  404: 'Check base URL and model ID.', 429: 'Quota or rate limit reached; try later.'}
         raise RuntimeError(f'OpenAI-compatible endpoint returned HTTP {error.code}. '
                            + hints.get(error.code, 'Check endpoint configuration and provider status.')) from None
-    except (URLError, TimeoutError, OSError):
+    except (URLError, TimeoutError, OSError, HTTPException):
         raise RuntimeError('Cannot reach OpenAI-compatible endpoint. Check URL, TLS certificates, connection, and timeout.') from None
     except (ValueError, UnicodeError):
         raise RuntimeError('OpenAI-compatible endpoint returned invalid JSON.') from None
@@ -353,7 +251,11 @@ def run_provider(prompt, stop=None, config=None):
     if stop is not None and (not isinstance(stop, list) or any(not isinstance(s, str) or not s for s in stop)):
         raise ValueError('Stop sequences must be nonempty strings.')
     provider = config['provider']
-    run = {'codex': run_codex, 'claude': run_claude, 'openai': run_openai}[provider]
+    if provider == 'chatgpt':
+        from ChatGPTAuth import run_chatgpt
+        run = run_chatgpt
+    else:
+        run = run_openai
     response = run(prompt, config['providers'][provider], config['timeout_seconds'], _environment())
     if not isinstance(response, str) or not response.strip():
         raise RuntimeError('AI provider returned no text.')

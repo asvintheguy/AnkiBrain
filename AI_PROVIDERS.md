@@ -1,258 +1,200 @@
-# Local AI provider setup
+# Local AI providers — native authentication, no provider CLIs
 
-AnkiBrain Local mode supports:
-
-| Option | Authentication | Billing / limits |
+| Option in this build | Authentication | Usage / billing |
 | --- | --- | --- |
-| ChatGPT via **Codex CLI** | Sign in to the official CLI with your own ChatGPT account | Your Codex allowance; plan limits and any enabled extra usage apply |
-| Claude via **Claude Code** | Sign in to the unmodified official CLI with your own Claude account | Your eligible Claude plan; account limits and any enabled extra usage apply |
-| **OpenAI-compatible API** | API key, custom authentication headers, or no authentication for a local endpoint | Whatever that endpoint charges; a chat subscription is not an API key |
-| **Gemini API free tier** | Google AI Studio API key, using the OpenAI-compatible option | Free only for eligible accounts, projects, models, and quotas |
+| **ChatGPT (experimental)** | Built-in browser OAuth with your own account | ChatGPT-backed Codex service; your account's entitlements, limits, credits, and extra-usage settings apply |
+| **OpenAI-compatible API** (final option) | API key, custom headers, or no authentication for a local server | The selected endpoint's billing |
+| **Gemini API preset** | Google AI Studio API key | Eligible free API quota, or paid API billing if enabled |
+| **Grok / xAI API preset** | xAI API key | Separate API billing, **not SuperGrok/X Premium subscription login** |
+| Other API presets | OpenAI, OpenRouter, DeepSeek, Kimi Open Platform keys | Each service's API billing, not its chat subscription |
 
-These settings do **not** change AnkiBrain Regular/Server mode. Local mode means documents and embeddings are managed locally—not that the language model is offline. Prompts, conversation history, and retrieved document excerpts go to the provider you select.
+**No Codex, Claude Code, Gemini, Grok, or Copilot CLI is installed, invoked, or required by these providers.** The older Codex/Claude CLI adapters have been removed. The existing external Python document engine is still required; it is not an AI-provider CLI.
 
-## 1. Open the settings
+These settings affect **Local mode only**, not Regular/Server mode. Local means document handling and embeddings run on your computer, not that the language model is offline. Prompts, conversation history, and retrieved document excerpts go to your chosen service. Switching providers retains that history: clear the conversation before switching if you do not want to share it with the next provider.
 
-1. Install this version of the add-on in Anki and complete AnkiBrain's existing **Local mode** dependency installation. The provider changes do not replace its Python, document-loader, Chroma, or local embedding dependencies.
-2. Choose **AnkiBrain → AI Provider Settings…**, or **Settings → Advanced → AI Provider Settings…** in the side panel.
-3. Select a provider and fill its fields. Each provider keeps its own settings when you switch.
-4. **Test (uses quota)** sends a short real request using the unsaved fields. It does not save settings.
-5. Click **Save**. New requests read the saved configuration; restarting the AI is not required. In-flight provider calls keep the settings they started with. Existing conversation history is retained and will be sent to the newly selected provider—clear the conversation first if you do not want that.
+## 1. Open settings
 
-When using the source checkout, build the webview before loading the add-on:
+Complete the add-on's [installation and Local-mode dependency setup](README.md), then open **AnkiBrain → AI Provider Settings…**, also available under **Settings → Advanced** in the side panel.
 
-```sh
-cd webview
-yarn install --frozen-lockfile
-yarn build
-```
+- Settings apply to the next request after **Save**. In-flight requests retain their original configuration.
+- **Test (uses quota)** sends a real short prompt using unsaved settings. It does not save them.
+- Browser sign-in and local sign-out take effect immediately, independently of the settings Save/Cancel buttons.
+- If upgrading from a CLI provider, requests stop with a migration message until you explicitly choose a provider and Save. The settings dialog carries over the old Codex model/effort where possible, preserves API settings, and removes CLI fields. It never reads or copies another application's login cache. An old Claude selection does not silently send requests to ChatGPT.
 
-`webview/build` is required by Anki and is ignored by Git. Include it when packaging/copying the add-on. Back up and preserve an existing installation's `user_files`; do not replace it with another person's credentials or documents.
+## 2. Native ChatGPT sign-in
 
-## 2. ChatGPT subscription / Codex
+1. Select **ChatGPT — native browser sign-in (experimental)**.
+2. Leave **Private sign-in directory** blank for the default, or enter an absolute directory dedicated to this account.
+3. Click **Sign in with ChatGPT…**. Your normal browser opens OpenAI's authentication site. Check that it is `https://auth.openai.com`; enter credentials there, never into AnkiBrain, a terminal, or this repository.
+4. Complete sign-in and return to Anki. The callback listens only on localhost, using port 1455 or 1457. Keep the browser and Anki on the same machine. This build does not provide a remote/headless/device-code login flow.
+5. Click **Load account models**, then select an available model. The editable list preserves your existing choice rather than silently switching price tiers. The default `gpt-5.6-luna` is only a starting value, not a promise of access; choose from your account's catalog or enter a known exact ID.
+6. Optionally select **Reasoning effort**, subject to your model's supported levels. Blank uses the service default.
+7. Click **Test (uses quota)** and **Save**. No OpenAI API key is needed.
 
-Install a recent official Codex CLI (integration tested with **0.153.4**):
+Closing the dialog cancels a pending login. Sign-in expires after five minutes; close other pending login windows if both callback ports are occupied. **Sign out locally…** deletes this add-on's cached credentials. It does not revoke other OpenAI sessions or cancel already-running requests. Manage account-wide sessions through OpenAI separately.
 
-```sh
-npm install -g @openai/codex
-codex login
-codex login status
-```
+### What this connection actually uses
 
-Choose **Sign in with ChatGPT**, not API-key login. For a headless machine, the CLI also supports:
+This is a **DeepTutor-style experimental compatibility path**, implemented directly in Python:
 
-```sh
-codex login --device-auth
-```
+- Browser OAuth with PKCE and state validation against `auth.openai.com`.
+- Direct text requests to `https://chatgpt.com/backend-api/codex/responses` with the user's OAuth token.
+- Models from that account's Codex catalog; no ordinary ChatGPT conversation API or browser-cookie scraping.
+- No provider subprocess, tools, shell commands, MCP, agent plugins, or automatic API-key fallback.
 
-In AnkiBrain:
+Removing the CLI does **not** change which service supplies the response. OpenAI's pricing documentation says **ChatGPT Work and Codex share pricing, credits, and usage limits**; that does not imply every ordinary ChatGPT website allowance applies here. Check your actual account's usage dashboard. Enabled extra usage/credits may cost money.
 
-- **Provider:** ChatGPT subscription — Codex CLI.
-- **Model ID:** blank for the CLI default, or an exact Codex-compatible model available to your account. ChatGPT's UI model names are not necessarily valid Codex IDs.
-- **CLI executable path:** blank if Anki can find `codex` on its PATH; otherwise paste its full executable path. On Linux/macOS, use `command -v codex` to find it. Desktop-launched Anki often has a different PATH than your terminal.
-- **CLI configuration directory:** blank uses `CODEX_HOME` from the environment/`.env`, or the CLI's default `~/.codex`. Set a full directory path to use a different login. Log in with that same directory, for example `CODEX_HOME=/absolute/path codex login`.
-- **Reasoning effort:** blank uses the CLI default. Available levels depend on the model.
+This is not a documented general-purpose OpenAI API contract or an OpenAI-endorsed integration. It uses the public Codex OAuth client and compatibility endpoints, which can change or reject third-party traffic. Review current provider terms before distributing or relying on it. A protocol change should fail visibly, not fall back to API billing.
 
-AnkiBrain invokes the official CLI; it never copies OAuth tokens or implements a private ChatGPT API. Subscription mode forces ChatGPT authentication and does not fall back to an OpenAI API key. Requests use fresh ephemeral sessions, with conversation context supplied by AnkiBrain.
+### Private credential storage
 
-Codex runs in an empty temporary working directory, with user configuration/rules ignored, hosted search and integrations disabled, and a restrictive filesystem/network permission profile. A CLI too old to accept the required options fails rather than retrying without restrictions.
+Default: **`user_files/provider_auth/chatgpt/session.json`**, with a sibling refresh lock file. A custom sign-in directory keeps the same filenames and must be absolute. Use different directories for separate accounts.
 
-## 3. Claude subscription / Claude Code
+Tokens are plaintext on disk, stored outside the webview and excluded from Git and release packages at the default location. The default account directory is owner-only when created on POSIX, and credential writes are atomic with mode `0600`. On Windows protect the directory with your user-account ACLs. Use disk encryption and keep backups private. A custom directory must also stay outside publicly shared/source directories; it is your responsibility to exclude that location from backups/publication.
 
-Install the official Claude Code CLI using [Anthropic's installation instructions](https://code.claude.com/docs/en/setup). Use **2.1.263 or newer** for the options used here. Then:
+The adapter never reads or modifies `~/.codex`, `~/.claude`, `~/.grok`, browser cookies, or their logout state. Normal token renewal is serialized across Anki and the Python worker so they do not race refresh-token rotation. A 401 response can trigger one refresh and one replay; quota errors and other errors are not retried automatically. Authentication errors do not expose token responses in logs.
 
-```sh
-claude auth login
-claude
-```
+## 3. Other subscriptions: what is and isn't available
 
-Choose your **Claude subscription account**, not Console/API billing. Check `/status` inside Claude Code to confirm the account and billing method, then exit it.
+Removing the CLIs does not make every service's subscription OAuth available to third-party applications:
 
-In AnkiBrain:
+| Service | Direct subscription sign-in in this build? | Reason / alternative |
+| --- | --- | --- |
+| Claude | **No** | Anthropic explicitly prohibits third-party apps offering Claude.ai login or collecting/intermediating subscription tokens. Its unmodified-binary exception is irrelevant here because CLI adapters were removed. Use a properly authorized OpenAI-compatible gateway with separately billed API credentials if desired; the native Anthropic Messages API is not implemented. |
+| Gemini / Google AI Pro or Ultra | **No** | Google prohibits third-party harvesting/piggybacking Gemini CLI OAuth. Use an AI Studio key and eligible API free quota instead. |
+| Grok / SuperGrok / X Premium | **Not implemented** | Grok Build has subscription OAuth and partner integrations, but an arbitrary third-party native OAuth integration has not been established or validated here. The xAI API preset is separately billed. |
+| GitHub Copilot | **Not implemented** | GitHub documents OAuth-app authentication for its SDK, but that is not an implemented native HTTP adapter here. No SDK/CLI sidecar is installed. |
+| Kimi Code | **No OAuth adapter** | Official-client OAuth and third-party Coding Plan keys are different paths. Kimi documents subscription-backed keys for permitted agent/development uses, but directs product integrations to Kimi Open Platform. This tutor presets the latter, not a claimed entitlement to coding quota. |
+| Qwen Code | **No** | Its documentation says Qwen OAuth was discontinued; use the applicable API/Coding Plan setup instead. No stale OAuth flow is included. |
 
-- **Provider:** Claude subscription — Claude Code.
-- **Model ID:** an alias such as `sonnet`, `opus`, or a full model ID available on your plan. Blank uses the CLI default.
-- **CLI executable path:** blank for PATH lookup or the full `claude` executable path.
-- **CLI configuration directory:** blank uses `CLAUDE_CONFIG_DIR` or the CLI default. If set, sign in using the same directory, e.g. `CLAUDE_CONFIG_DIR=/absolute/path claude auth login`.
-- **Reasoning effort:** optional, subject to model availability.
+API key authentication is implemented natively in this add-on too—it just does not consume a chat subscription. Do not paste CLI refresh tokens, cookies, or website session tokens into the API-key field. Do not impersonate an approved client with custom headers to bypass access controls.
 
-Run the login as the **same OS user** that runs Anki. CLI authentication, token refresh, and logout remain the CLI's responsibility. AnkiBrain neither stores nor forwards Claude subscription tokens. `CLAUDE_CODE_OAUTH_TOKEN`, API keys, cloud-provider overrides, and arbitrary injected CLI options are not forwarded by this adapter.
+## 4. OpenAI-compatible API configuration
 
-Requests use print mode, restricted mode, safe mode, no session persistence, no built-in tools, no MCP servers, disabled hooks/skills, and an empty working directory. **Do not add `--bare`: it disables subscription authentication.** No API-key fallback is attempted. Administrator-managed CLI policies still apply; these restrictions are not a VM/container boundary for the CLI program itself.
+Select the final provider, **OpenAI-compatible API**. The preset dropdown fills an endpoint and environment-variable name, then clears previous headers/options after confirmation. Presets do not verify free quota or grant model access. Choose an exact model from your provider.
 
-Anthropic distinguishes running the unmodified CLI with an end user's own login from collecting or proxying subscription credentials. This integration only does the former. Review the [current legal/authentication conditions](https://code.claude.com/docs/en/legal-and-compliance), especially before distributing a product or offering a hosted service.
-
-**Validation:** CLI 2.1.263 accepts these flags and rejects an unauthenticated request. A paid-account end-to-end test has **not** been performed on this machine. Use the Test button after logging in; verify your account's actual usage/billing dashboard. CLI acceptance alone is not proof of subscription billing.
-
-## 4. Generic OpenAI-compatible API
-
-Choose the final provider option, **OpenAI-compatible API**.
-
-| Setting | Meaning |
+| Field | Meaning |
 | --- | --- |
-| Base URL | API prefix, e.g. `https://api.openai.com/v1`. AnkiBrain appends `/chat/completions` once. Do **not** include that suffix yourself. |
-| Model ID | Required; exact model/deployment ID understood by that endpoint |
-| API key | A literal key, `${ENV_VAR}`, or blank to omit Bearer authentication |
-| Custom headers | JSON object of header names and string values; values can contain `${ENV_VAR}` |
-| Temperature | Blank omits it; otherwise a number from 0 to 2. Leave blank for models that reject temperature. |
+| Base URL | API prefix; AnkiBrain appends `/chat/completions`. Do not include that suffix. |
+| Model ID | Required exact model/deployment ID |
+| API key | Literal key, `${ENV_VAR}`, or blank to omit Bearer authentication |
+| Custom headers | JSON object of string values, optionally using `${ENV_VAR}` |
+| Temperature | Blank omits it; otherwise 0–2. Leave blank if the model rejects temperature. |
 | Max output tokens | Blank omits it; otherwise sends `max_tokens` |
-| Extra request body | Additional top-level JSON fields, e.g. `{"reasoning_effort":"low"}` |
-| Allow HTTP outside localhost | Explicit opt-in for unencrypted LAN/remote endpoints; leave off for internet services |
-
-Example headers:
-
-```json
-{
-  "OpenAI-Organization": "org-example",
-  "OpenAI-Project": "proj_example",
-  "X-Custom-Token": "${MY_GATEWAY_TOKEN}"
-}
-```
-
-Header names are case-insensitive. A supplied `Authorization` header replaces generated Bearer authentication and prevents API-key expansion. For a provider using `api-key` instead, clear the **API key** field and enter:
-
-```json
-{
-  "api-key": "${MY_API_KEY}"
-}
-```
-
-For models that require `max_completion_tokens`, leave **Max output tokens** blank and use:
-
-```json
-{
-  "max_completion_tokens": 4096,
-  "reasoning_effort": "low"
-}
-```
-
-Extra body fields override optional temperature/token fields when both are supplied. They cannot override the model, messages, streaming, tools, number of completions, or stop sequences. This is a **text-only Chat Completions** adapter: it does not execute tool calls, support Responses-only endpoints, upload images, or emulate provider-specific APIs. Custom headers alone do not make a non-compatible endpoint compatible. Classic Azure endpoints requiring `api-version` query parameters need a compatible gateway; query strings in the base URL are not supported.
+| Extra request body | Optional provider-specific fields, e.g. `{"max_completion_tokens":4096,"reasoning_effort":"low"}` |
+| Allow HTTP outside localhost | Explicit opt-in for unencrypted remote/LAN endpoints; leave off for internet services |
 
 Examples:
 
-| Service | Base URL | Authentication |
+| Service | Base URL | Credential |
 | --- | --- | --- |
-| OpenAI API | `https://api.openai.com/v1` | Your separately billed OpenAI API key |
-| Gemini API | `https://generativelanguage.googleapis.com/v1beta/openai` | Google AI Studio API key |
-| OpenRouter | `https://openrouter.ai/api/v1` | OpenRouter API key; use its model IDs |
-| Local OpenAI-compatible server | e.g. `http://127.0.0.1:1234/v1` | Blank if the local server requires no authentication |
+| OpenAI API | `https://api.openai.com/v1` | `OPENAI_API_KEY` |
+| Gemini API | `https://generativelanguage.googleapis.com/v1beta/openai` | `GEMINI_API_KEY` |
+| Grok / xAI API | `https://api.x.ai/v1` | `XAI_API_KEY` |
+| OpenRouter | `https://openrouter.ai/api/v1` | `OPENROUTER_API_KEY` |
+| DeepSeek | `https://api.deepseek.com/v1` | `DEEPSEEK_API_KEY` |
+| Kimi Open Platform (international) | `https://api.moonshot.ai/v1` | `MOONSHOT_API_KEY` |
+| Local compatible server | e.g. `http://127.0.0.1:1234/v1` | Blank if authentication is not required |
 
-Those endpoint examples are not claims of live testing or free access. For other services, use the endpoint and exact model ID from that service's documentation.
+Set environment references in **`user_files/.env`**, for example:
 
-There is no automatic retry, redirect following, provider fallback, or API-key fallback. Redirects are rejected so credentials/custom headers cannot be forwarded to another host. HTTP 401/403 errors indicate authentication/access problems, 404 commonly indicates a bad base URL/model, and 429 indicates quota/rate limits. Empty, malformed, tool-call, filtered, or truncated responses fail rather than silently creating partial cards. API response bodies and CLI stderr are not copied into errors because they may echo private data.
+```dotenv
+GEMINI_API_KEY='your-ai-studio-key'
+MY_GATEWAY_TOKEN='your-gateway-key'
+```
 
-## 5. Can a free Google account provide free Gemini here?
+Custom header example:
 
-**Potentially yes, through the Gemini API free tier—not by substituting a Google login token for an API key.**
+```json
+{"X-Custom-Token":"${MY_GATEWAY_TOKEN}"}
+```
 
-1. Sign in to [Google AI Studio](https://aistudio.google.com/apikey) with an eligible Google account.
-2. Create/select a project and obtain its Gemini API key. A paid Google AI subscription is not required merely to qualify for available free API usage.
-3. Check the project's actual free-tier access, model availability, [pricing](https://ai.google.dev/gemini-api/docs/pricing), and [rate limits](https://ai.google.dev/gemini-api/docs/rate-limits). Avoid enabling paid billing if your requirement is zero paid API usage. AnkiBrain cannot tell whether a key belongs to a billed project or enforce your cloud spending limit.
-4. In AnkiBrain's API settings, use **Use Gemini API preset…**. It fills Google's OpenAI-compatible base URL and `${GEMINI_API_KEY}`, clears unrelated API options, and leaves the model for you to choose.
-5. Paste the key into **API key**, or put it in `user_files/.env`:
+A custom `Authorization` header overrides the API-key field, case-insensitively. For an endpoint expecting `api-key`, clear the API key and set `{"api-key":"${MY_GATEWAY_TOKEN}"}`. Extra body fields may override optional temperature/token limits, but cannot override routing, messages, streaming, tools, number of completions, or stop sequences.
 
-   ```dotenv
-   GEMINI_API_KEY='your-ai-studio-key'
-   ```
+This is a **text-only Chat Completions** adapter, not a universal API translator. Responses-only APIs, native Anthropic Messages, image uploads, tool execution, and base-URL query parameters are unsupported. Azure endpoints requiring `api-version` query parameters need a compatible gateway. Custom headers do not change protocol compatibility.
 
-6. Enter a text model currently eligible for your project's free quota. For example, Google's compatibility guide currently demonstrates `gemini-3.8-flash`; verify availability and pricing before choosing it. Model IDs and free quotas change.
-7. Test, save, and check AI Studio's usage dashboard.
+Redirects, automatic retries, and provider fallback are disabled for generic APIs. TLS verification stays enabled. Empty, invalid, tool-call, filtered, or truncated responses fail instead of producing partial cards. HTTP response bodies are not copied into errors because they may echo secrets.
 
-Google also advertises a personal-account free allowance for its **own Gemini CLI** (60 requests/minute and 1,000/day in the referenced documentation). **Those are not promises about Gemini API quotas.** Google explicitly restricts harvesting/piggybacking Gemini CLI OAuth for third-party backend access and recommends AI Studio/Vertex API keys for integrations. AnkiBrain therefore has **no Gemini CLI OAuth/subscription adapter**, and upgrading to Google AI Pro/Ultra does not turn its subscription credentials into an API key.
+## 5. Free Gemini with a free Google account
 
-Free-tier privacy and eligibility matter: unpaid API prompts/responses may be used to improve Google's products and may be reviewed. Do not send sensitive study notes, patient information, or confidential documents without checking the applicable terms. Supported regions, age/account eligibility, and regional API-client restrictions also apply; see the [Gemini API terms](https://ai.google.dev/gemini-api/terms). Free usage is neither unlimited nor guaranteed for every account/model.
+**Potentially yes, using an AI Studio API key—not Google subscription OAuth.**
 
-## 6. Configuration files and precedence
+1. Open [Google AI Studio](https://aistudio.google.com/apikey), create/select an eligible project, and obtain its Gemini API key.
+2. Check the project's actual free-tier access, supported models, [pricing](https://ai.google.dev/gemini-api/docs/pricing), and [rate limits](https://ai.google.dev/gemini-api/docs/rate-limits). A Google AI subscription is not required for eligible free API access.
+3. If zero paid usage is essential, do not enable paid billing. AnkiBrain cannot determine whether your key is billed or enforce your cloud spending limit.
+4. Apply the **Gemini API** preset. Supply the key directly or through `${GEMINI_API_KEY}` in `.env`, then enter a currently free-tier-eligible text model for that project.
+5. Test, Save, and check AI Studio's usage dashboard.
 
-The dialog writes **`user_files/ai_providers.json`**, separately from ordinary UI settings. It is ignored by Git and never sent to the webview. Saves use atomic replacement with owner-only file permissions on POSIX. Keys/headers are still **plaintext**; on Windows protect the file with your user-account ACLs. Keep backups private.
+Do not confuse Gemini CLI's advertised personal-account limits with Gemini **API** quotas; they are different services. A Google AI Pro/Ultra subscription does not automatically grant API credits. Free availability varies by region, account, project, and model.
 
-A complete example (replace the API model before selecting `openai`):
+Unpaid prompts/responses may be used for product improvement and human review. Avoid sensitive patient data or confidential study material without checking applicable privacy terms. Google's [API terms](https://ai.google.dev/gemini-api/terms) include regional conditions, including Paid Services requirements when making API clients available to users in the EEA, Switzerland, or UK. Check current eligibility and terms before use/distribution.
+
+## 6. Configuration and limits
+
+The private settings file is **`user_files/ai_providers.json`**, saved atomically with mode `0600` on POSIX. Keys/headers are plaintext; protect Windows ACLs and backups. Only public provider/model metadata reaches the webview.
 
 ```json
 {
-  "provider": "codex",
+  "provider": "chatgpt",
   "timeout_seconds": 600,
   "document_chunk_size": 6000,
   "providers": {
-    "codex": {
-      "model": "",
-      "cli_path": "",
-      "config_dir": "",
-      "effort": ""
-    },
-    "claude": {
-      "model": "sonnet",
-      "cli_path": "",
-      "config_dir": "",
-      "effort": ""
-    },
+    "chatgpt": {"model":"gpt-5.6-luna","auth_dir":"","effort":""},
     "openai": {
-      "model": "MODEL_ID_FROM_YOUR_PROVIDER",
-      "base_url": "https://api.openai.com/v1",
-      "api_key": "${OPENAI_API_KEY}",
-      "headers": {},
-      "temperature": null,
-      "max_tokens": null,
-      "extra_body": {},
-      "allow_insecure_http": false
+      "model":"MODEL_ID_FROM_YOUR_PROVIDER",
+      "base_url":"https://api.openai.com/v1",
+      "api_key":"${OPENAI_API_KEY}",
+      "headers":{}, "temperature":null, "max_tokens":null,
+      "extra_body":{}, "allow_insecure_http":false
     }
   }
 }
 ```
 
-- The selected provider is the **only** provider used. Missing optional file fields receive defaults; unknown fields, invalid values, and malformed JSON fail clearly instead of silently selecting a different provider.
-- Saved provider settings take precedence over the old local `llmModel`/`temperature` webview settings, which now apply only to Server mode. Before the first provider-config save, the old `llmModel` seeds Codex's model; `ANKIBRAIN_CODEX_CLI` and `ANKIBRAIN_CODEX_TIMEOUT` are migration defaults only.
-- Provider **configuration directory** overrides `CODEX_HOME` / `CLAUDE_CONFIG_DIR`. Blank **CLI executable path** means PATH lookup. Use absolute executable/directory paths, not a shell command with arguments. For npm installs the Node runtime must be reachable too; on Windows prefer native executables.
-- `${NAME}` expansion is supported in API keys and header **values**, not arbitrary JSON fields. Values in `user_files/.env` override the process environment. Missing/empty referenced variables fail before making a request. Each request re-reads `.env` and provider configuration, so changes apply without restart. Literal secrets are also supported.
-- Subscription CLIs get a small environment allowlist for home/runtime paths, proxies, and certificate configuration—not your unrelated credentials or injected `NODE_OPTIONS`. Their official cached login is reused. API keys in the Anki environment are not forwarded to subscription CLI invocations.
-- API networking uses Python's standard TLS verification and process proxy/certificate configuration; it never disables TLS verification. CLI networking inherits allowed proxy/certificate environment values. The permission profile's disabled network applies to agent tools, **not** the CLI's necessary inference/authentication connection.
-- Timeout is 1–3,600 seconds: a wall-clock limit for CLI requests and a socket-operation timeout for API requests. The CLI may perform its own internal retries within that limit; AnkiBrain does not implement retries.
-- Document-to-cards chunk size is 100–100,000 **characters**, not tokens. Lower it if a model truncates card JSON or exceeds its context window. This controls Make Cards document splitting, not retrieval embedding chunking.
-- Editing the file manually changes backend behavior on the next request. The webview's displayed provider/model updates on a dialog save or Anki restart.
-- Local cost is shown as **Provider-billed**, not `$0`: subscription quota, extra credits, and arbitrary API pricing cannot be reliably calculated here. Consult the provider's dashboard.
+- Missing optional fields receive defaults; malformed JSON, unknown fields, and invalid values fail visibly. Only `chatgpt` and `openai` are runnable providers. Old `codex`/`claude` selectors require explicit migration through Settings.
+- Provider settings replace the local use of the old webview `llmModel`/`temperature` controls; those now belong to Server mode. Legacy `ANKIBRAIN_CODEX_*`, `CODEX_HOME`, and `CLAUDE_CONFIG_DIR` variables have no effect.
+- `${NAME}` expansion applies only to API-key/header values. `.env` overrides process environment variables. Missing references fail before sending anything. Provider config and `.env` reload on each request.
+- Networking uses standard Python TLS/proxy configuration from the process environment. Proxies must be trusted; certificate verification is never disabled.
+- Timeout (1–3,600 seconds) is a **socket-operation** timeout, not a total request deadline. A slow stream can last longer. OAuth/model-catalog operations use 30-second socket timeouts; interactive sign-in waits up to five minutes, plus an in-progress token exchange.
+- Document-to-cards chunk size (100–100,000 characters) is not a token count or retrieval-embedding setting. Reduce it for context/response limits. Native streaming responses have 1 MiB per-line and 16 MiB total transport limits.
+- Local cost says **Provider-billed**, not `$0`. Consult your provider dashboard for actual credits, charges, and limits.
 
-## 7. Checks and troubleshooting
+## 7. Verification and troubleshooting
 
-Offline regression checks, without any paid/live calls:
+Offline checks, with no live accounts/charges:
 
 ```sh
 python3 tests/test_ai_providers.py
-```
-
-With the local LangChain and PyQt6 dependencies installed:
-
-```sh
+# Optional, using the installed Local-mode environment:
 user_files/venv/bin/python tests/test_ai_providers.py --runtime
 ```
 
-Windows uses `user_files\venv\Scripts\python.exe`. These checks cover config validation/persistence, secret resolution, custom headers, local HTTP transport, no redirects/retries, CLI arguments and error handling, IPC serialization, and (with `--runtime`) real Qt widgets and LangChain conversation calls against a local test server.
+These cover config migration/persistence, private credentials, real localhost OAuth callbacks, PKCE/state validation, token refresh races, direct HTTP/SSE, no provider process launches, secret-safe errors, redirect refusal, API headers, IPC serialization, and (with `--runtime`) Qt and LangChain integration.
 
-A real provider smoke test (**uses the selected account's quota/billing**):
+A real smoke test **uses the selected account's quota/billing**:
 
 ```sh
 user_files/venv/bin/python ChatAI/AIProviders.py
 ```
 
-Use `--config /path/to/ai_providers.json` to test a different configuration without changing Anki's saved file. This option affects that test invocation only.
+Windows uses `user_files\venv\Scripts\python.exe`. Optional `--config /absolute/path/to/ai_providers.json` tests a separate file without modifying Anki's settings.
 
-If it fails:
+- **CLI providers were removed:** open Settings, select native ChatGPT or an API, complete sign-in/configuration, and Save.
+- **Not signed in / invalid session / 401:** use the same private sign-in directory, sign out locally, and sign in again. No CLI cache is imported.
+- **Callback unavailable:** close other pending logins; allow localhost ports 1455/1457. Browser and Anki must run on the same machine.
+- **403 / 404 / 429:** check account access, model/endpoint, or quota respectively. Model catalog availability is not proof of unlimited/free use.
+- **HTML / wrong response format:** an API base URL must point to a compatible API, not a consumer website.
+- **Local engine/dependency failure:** complete Local-mode installation. Native auth does not remove the legacy document/embedding dependencies or their initial model download.
 
-- **CLI not found / cannot launch:** use the full executable path, confirm it runs as the same OS user, and check Node/native-runtime dependencies. Anki does not source your interactive shell profile.
-- **CLI exited:** check version, log in through the official CLI again, check model/effort access, and inspect your quota. Old CLI versions are not retried with weaker security settings. No subscription connector silently switches to billed API usage.
-- **Configuration cannot be read:** correct `user_files/ai_providers.json` or restore a backup. Invalid files are not automatically overwritten.
-- **Endpoint returned HTML / wrong format:** the base URL must be an OpenAI-compatible API prefix, not a website, ChatGPT page, or `/responses` endpoint.
-- **Module missing / local engine won't start:** complete the existing Local mode dependency installation. Subscription authentication does not remove those dependencies. Document retrieval still uses local Hugging Face embeddings and may download their model on first use.
+Validation is offline/local-server testing, Python 3.9 LangChain/Qt integration, and the webview build. **The new browser OAuth flow has not yet been completed against a real account, nor tested in a full running-Anki session.** Live endpoint access, model compatibility, billing, and other operating systems still need user verification. Earlier release tests of a Codex CLI request do not validate this new native implementation.
 
-Tested on Linux: Codex 0.153.4 with an actual ChatGPT login; generic API against a local HTTP server; Python 3.9.25 with LangChain 0.0.231 and PyQt6 6.5.1; webview production build. Claude's flags/authentication-failure path were checked with 2.1.263, but no Claude/Gemini account-backed request or full running-Anki session was available. Other OS/CLI versions should be verified with Test before regular use.
+## Primary references
 
-## Sources (reviewed 6 September 2026)
-
-- [OpenAI: Codex with your ChatGPT plan](https://help.openai.com/en/articles/11369540-codex-agent-faq)
-- [Codex authentication](https://developers.openai.com/codex/auth)
-- [Codex configuration reference](https://developers.openai.com/codex/config-reference)
-- [Claude Code authentication](https://code.claude.com/docs/en/authentication)
-- [Claude Code CLI reference](https://code.claude.com/docs/en/cli-reference)
-- [Claude Code legal and compliance](https://code.claude.com/docs/en/legal-and-compliance)
-- [Google: OpenAI-compatible Gemini API](https://ai.google.dev/gemini-api/docs/openai)
-- [Gemini pricing](https://ai.google.dev/gemini-api/docs/pricing), [API keys](https://ai.google.dev/gemini-api/docs/api-key), [rate limits](https://ai.google.dev/gemini-api/docs/rate-limits), [terms](https://ai.google.dev/gemini-api/terms)
-- [Gemini CLI authentication](https://github.com/google-gemini/gemini-cli/blob/main/docs/get-started/authentication.mdx) and [FAQ / third-party OAuth restriction](https://github.com/google-gemini/gemini-cli/blob/main/docs/resources/faq.md)
+- [DeepTutor pinned provider implementation](https://github.com/HKUDS/DeepTutor/blob/42fab3cf429a1fbf36b257ab8d116a3814964202/deeptutor/services/llm/provider_core/openai_codex_provider.py) and [OAuth implementation](https://github.com/HKUDS/DeepTutor/blob/42fab3cf429a1fbf36b257ab8d116a3814964202/deeptutor/services/codex_auth/oauth.py)
+- [OpenAI authentication](https://developers.openai.com/codex/auth) and [pricing / shared usage](https://developers.openai.com/codex/pricing)
+- [Anthropic authentication restrictions](https://code.claude.com/docs/en/legal-and-compliance)
+- [Google third-party OAuth restriction](https://github.com/google-gemini/gemini-cli/blob/main/docs/resources/faq.md), [Gemini OpenAI compatibility](https://ai.google.dev/gemini-api/docs/openai), [API terms](https://ai.google.dev/gemini-api/terms)
+- [Grok Build authentication](https://github.com/xai-org/grok-build/blob/main/crates/codegen/xai-grok-pager/docs/user-guide/02-authentication.md)
+- [GitHub Copilot SDK authentication](https://docs.github.com/en/copilot/how-tos/copilot-sdk/auth/authenticate)
+- [Kimi membership / permitted integrations](https://www.kimi.com/en/help/kimi-code/membership-guide)
+- [Qwen authentication](https://qwenlm.github.io/qwen-code-docs/en/users/configuration/auth/)

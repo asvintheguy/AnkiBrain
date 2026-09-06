@@ -55,7 +55,7 @@ class ExternalScriptManager:
         self.process.terminate()
 
     async def call(self, input_data: dict[str, str]) -> dict[str, str]:
-        # Serialize the whole request/response pair, not just writes. CLI calls can be slow.
+        # Serialize the whole request/response pair, not just writes. Provider calls can be slow.
         async with self.lock:
             self.process.stdin.write(json.dumps(input_data).encode() + b'\n')
             await self.process.stdin.drain()

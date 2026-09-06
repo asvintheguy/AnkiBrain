@@ -64,7 +64,7 @@ const AdvancedSettings = (props) => {
             AI Provider Settings…
           </Button>
           <Text fontSize={12} color={"gray"}>
-            Configure subscriptions, models, CLI paths, API endpoints, keys, headers,
+            Configure native ChatGPT sign-in, models, API endpoints, keys, headers,
             and request options. Saved changes apply to the next request.
           </Text>
         </Flex>

@@ -141,7 +141,7 @@ def handle_module_input(data: dict[str, Any]):
 
 
 if __name__ == '__main__':
-    # Let active CLI calls clean up their child process group on Restart AI / exit.
+    # Unwind active requests and release OAuth refresh locks on Restart AI / exit.
     signal.signal(signal.SIGTERM, lambda signum, frame: sys.exit(0))
     try:
         # Create .env if it doesn't exist.
