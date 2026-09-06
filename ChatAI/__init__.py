@@ -1,20 +1,22 @@
 import os
+import signal
 import sys
 from os import path
 from typing import List, Any
 
 module_dir = path.abspath(path.dirname(__file__))
 ankibrain_project_root_dir = path.join(module_dir, '..')
+sys.path.insert(1, ankibrain_project_root_dir)  # Share the host's IPC commands.
 user_data_dir = path.join(ankibrain_project_root_dir, 'user_files')
 dotenv_path = path.join(user_data_dir, '.env')
 
 import json
 from dotenv import load_dotenv
 
-from ChatAIWithDocuments import ChatAIWithDocuments, settings_path, get_card_gen_chunk_size
+from AIProviders import load_config
+from ChatAIWithDocuments import ChatAIWithDocuments
 from ChatAIWithoutDocuments import ChatAIWithoutDocuments
 from InterprocessCommand import InterprocessCommand as IC
-from langchain.callbacks import get_openai_callback
 
 
 def _module_return(data: dict[str, str]):
@@ -26,11 +28,7 @@ def module_return(cmd: IC, data: dict[str, Any] = None):
     if data is None:
         data = {}
 
-    # Always attach total_cost to the module's response.
-    if oa_cb is not None:
-        data['total_cost'] = oa_cb.total_cost
-    else:
-        raise Exception('Must supply an OpenAICallbackHandler.')
+    # Subscription quota and arbitrary API pricing are not tracked here.
 
     _module_return({
         'cmd': cmd.value,
@@ -46,10 +44,6 @@ def module_error(text: str):
 
 
 def handle_module_input(data: dict[str, Any]):
-    if os.getenv('OPENAI_API_KEY') is None:
-        module_error('Please set OPENAI_API_KEY')
-        return
-
     cmd = data['cmd']
     cmd = IC[cmd]
 
@@ -138,18 +132,17 @@ def handle_module_input(data: dict[str, Any]):
         module_return(IC.DID_DELETE_ALL_DOCUMENTS)
 
     elif cmd == IC.SPLIT_DOCUMENT:
-        model_name = 'gpt-5.6-luna'
-        with open(settings_path, 'r') as f:
-            model_name = json.load(f).get('llmModel', model_name)
         document_chunks = withDocumentsAI.split_document(
             data['path'],
-            chunk_size=get_card_gen_chunk_size(model_name)
+            chunk_size=load_config()['document_chunk_size']
         )
         chunks = [chunk.page_content for chunk in document_chunks]
         module_return(IC.DID_SPLIT_DOCUMENT, {'chunks': json.dumps(chunks)})
 
 
 if __name__ == '__main__':
+    # Let active CLI calls clean up their child process group on Restart AI / exit.
+    signal.signal(signal.SIGTERM, lambda signum, frame: sys.exit(0))
     try:
         # Create .env if it doesn't exist.
         if not os.path.isfile(dotenv_path):
@@ -158,34 +151,35 @@ if __name__ == '__main__':
 
         load_dotenv(dotenv_path, override=True)
 
-        if os.getenv('OPENAI_API_KEY') is not None:
-            withDocumentsAI = ChatAIWithDocuments()
-            withoutDocumentsAI = ChatAIWithoutDocuments()
-
-            withoutDocumentsSingleQuery = ChatAIWithoutDocuments()
+        withDocumentsAI = ChatAIWithDocuments()
+        withoutDocumentsAI = ChatAIWithoutDocuments()
+        withoutDocumentsSingleQuery = ChatAIWithoutDocuments()
 
         # Send ready message now after finished loading above.
         _module_return({'status': 'success'})
     except Exception as e:
         module_error(str(e))
+        sys.exit(1)
 
-    with get_openai_callback() as oa_cb:
-        while True:
-            input_line = sys.stdin.readline().strip()
-            if not input_line:
+    while True:
+        input_line = sys.stdin.readline()
+        if not input_line:
+            break
+        input_line = input_line.strip()
+        if not input_line:
+            continue
+
+        try:
+            input_data = json.loads(input_line)
+            if not input_data or type(input_data) != dict:
+                module_error(f'<ChatAI Module> Malformed module input: {str(input_data)}')
                 continue
 
             try:
-                input_data = json.loads(input_line)
-                if not input_data or type(input_data) != dict:
-                    module_error(f'<ChatAI Module> Malformed module input: {str(input_data)}')
-                    continue
-
-                try:
-                    handle_module_input(input_data)
-                except Exception as e:
-                    module_error(str(e))
-            except json.JSONDecodeError:
-                module_error(f'Invalid JSON input: {input_line}')
+                handle_module_input(input_data)
             except Exception as e:
                 module_error(str(e))
+        except json.JSONDecodeError:
+            module_error(f'Invalid JSON input: {input_line}')
+        except Exception as e:
+            module_error(str(e))

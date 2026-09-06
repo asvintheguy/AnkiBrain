@@ -1,5 +1,6 @@
 import asyncio
 import json
+import os
 import platform
 import signal
 import threading
@@ -8,12 +9,13 @@ from anki.hooks import addHook
 from aqt import mw, gui_hooks
 from aqt.qt import *
 from aqt.utils import showInfo
-from dotenv import set_key, load_dotenv
+from dotenv import set_key
 
 from ChatAIModuleAdapter import ChatAIModuleAdapter
 from ExplainTalkButtons import ExplainTalkButtons
 from InterprocessCommand import InterprocessCommand as IC
-from OpenAIAPIKeyDialog import OpenAIAPIKeyDialog
+from AIProviderDialog import AIProviderDialog
+from AIProviders import load_config
 from PostUpdateDialog import PostUpdateDialog
 from SidePanel import SidePanel
 from UserModeDialog import show_user_mode_dialog
@@ -23,28 +25,28 @@ from project_paths import dotenv_path
 from util import run_win_install, run_macos_install, run_linux_install, UserMode
 
 #The "GUIThreadSignaler" class allows the non-UI thread to modify/update the UI thread. Some uses include
-#resetting the UI, opening a file browser, showing dialogs for missing API keys
+#resetting the UI, opening a file browser, and showing AI provider settings
 class GUIThreadSignaler(QObject):
     """
     Required class for calling UI updates from the non-UI thread.
     """
     resetUISignal = pyqtSignal()
     openFileBrowserSignal = pyqtSignal(int)  # takes commandId so we can resolve the request
-    showNoAPIKeyDialogSignal = pyqtSignal()
+    showAISettingsSignal = pyqtSignal()
     sendToJSFromAsyncThreadSignal = pyqtSignal(dict)
 
     def __init__(self):
         super().__init__()
         self.resetUISignal.connect(self.reset_ui)
         self.openFileBrowserSignal.connect(self.open_file_browser)
-        self.showNoAPIKeyDialogSignal.connect(self.show_no_API_key_dialog)
+        self.showAISettingsSignal.connect(self.show_ai_settings)
         self.sendToJSFromAsyncThreadSignal.connect(self.send_to_js_from_async_thread)
 
     def send_to_js_from_async_thread(self, json_dict: dict):
         mw.ankiBrain.sidePanel.webview.send_to_js(json_dict)
 
-    def show_no_API_key_dialog(self):
-        showInfo('AnkiBrain has loaded. There is no API key detected, please set one before using the app.')
+    def show_ai_settings(self):
+        mw.ankiBrain.show_ai_provider_settings()
 
     def reset_ui(self):
         mw.reset()
@@ -99,9 +101,6 @@ class AnkiBrain:
         self.chatAI = ChatAIModuleAdapter()  # Requires async starting by calling .start
         self.chatReady = False
 
-        self.openai_api_key_dialog = OpenAIAPIKeyDialog()
-        self.openai_api_key_dialog.hide()
-
         # Should go last because this object takes self and can call items.
         # Therefore, risk of things not completing setup.
         from ReactBridge import ReactBridge
@@ -119,9 +118,6 @@ class AnkiBrain:
         mw.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self.sidePanel)
         self.sidePanel.resize(500, mw.height())
 
-        # Set up api key dialog.
-        self.openai_api_key_dialog.on_key_save(self.handle_openai_api_key_save)
-
         # Hook for injecting custom javascript into Anki cards.
         addHook("prepareQA", handle_card_will_show)
 
@@ -133,7 +129,7 @@ class AnkiBrain:
 
         if self.user_mode == UserMode.LOCAL:
             add_ankibrain_menu_item('Restart AI...', self.restart_async_members_from_sync)
-            add_ankibrain_menu_item('Set OpenAI API Key...', self.show_openai_api_key_dialog)
+            add_ankibrain_menu_item('AI Provider Settings...', self.show_ai_provider_settings)
             add_ankibrain_menu_item('Reinstall...', reinstall)
 
         # Check if AnkiBrain has been updated.
@@ -155,6 +151,22 @@ class AnkiBrain:
         settings = mw.settingsManager.settings
         print('Sending DID_LOAD_USER_FILES')
         self.reactBridge.send_cmd(IC.DID_LOAD_SETTINGS, settings)
+        if self.user_mode == UserMode.LOCAL:
+            self.notify_ai_settings_changed()
+
+    def notify_ai_settings_changed(self):
+        try:
+            config = load_config()
+            provider = config['provider']
+            options = config['providers'][provider]
+            model = f"{provider}: {options['model'] or 'CLI default'}"
+            temperature = options.get('temperature')
+        except (ValueError, OSError):
+            model, temperature = 'Local AI (check configuration)', None
+        # Only public metadata goes to JS; never pass the provider configuration.
+        self.reactBridge.send_to_js({'cmd': 'localAISettingsChanged', 'data': {
+            'model': model, 'temperature': temperature,
+        }})
 
     async def _start_async_members(self):
         """
@@ -176,15 +188,6 @@ class AnkiBrain:
         self.reactBridge.send_cmd(IC.SET_WEBAPP_LOADING_TEXT, {'text': 'Loading your settings...'})
         await self.load_user_settings()
         self.reactBridge.send_cmd(IC.DID_FINISH_STARTUP)
-
-        # Check for key in .env file in user_files
-        if self.user_mode == UserMode.LOCAL:
-            load_dotenv(dotenv_path, override=True)
-            if os.getenv('OPENAI_API_KEY') is None or os.getenv('OPENAI_API_KEY') == '':
-                print('No API key detected')
-                self.guiThreadSignaler.showNoAPIKeyDialogSignal.emit()
-            else:
-                print(f'Detected API Key: {os.getenv("OPENAI_API_KEY")}')
 
     async def _stop_async_members(self):
         """
@@ -220,10 +223,12 @@ class AnkiBrain:
         return output
 
     def handle_openai_api_key_save(self, key):
-        self.openai_api_key_dialog.hide()
+        # Backward-compatible bridge command; providers resolve .env on every request.
+        if not isinstance(key, str) or any(ord(c) < 32 for c in key):
+            raise ValueError('Invalid API key.')
         set_key(dotenv_path, 'OPENAI_API_KEY', key)
-        os.environ['OPENAI_API_KEY'] = key
-        self.restart_async_members_from_sync()
+        if os.name != 'nt':
+            os.chmod(dotenv_path, 0o600)
 
     def _handle_process_signal(self, signal, frame):
         try:
@@ -276,8 +281,15 @@ class AnkiBrain:
             self.sidePanel.show()
             mw.settingsManager.edit('showSidePanel', True)
 
-    def show_openai_api_key_dialog(self):
-        self.openai_api_key_dialog.show()
+    def show_ai_provider_settings(self):
+        try:
+            self.ai_provider_dialog = AIProviderDialog(mw)
+        except (ValueError, OSError) as error:
+            showInfo(str(error))
+            return
+        self.ai_provider_dialog.accepted.connect(self.notify_ai_settings_changed)
+        self.ai_provider_dialog.setModal(True)
+        self.ai_provider_dialog.show()
 
     def handle_anki_card_webview_pycmd(self, handled, cmd, context):
         try:

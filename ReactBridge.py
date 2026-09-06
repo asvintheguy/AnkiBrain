@@ -1,6 +1,5 @@
 import asyncio
 import json
-import os
 from typing import List
 
 from aqt import mw
@@ -50,7 +49,7 @@ class ReactBridge:
             # Only include error field if there was an error.
             consolidated['error'] = error
 
-        print(f'(ReactBridge) Sending cmd to react app: {json.dumps(consolidated)}')
+        print(f'(ReactBridge) Sending cmd to react app: {cmd.value}')
         self.send_to_js(consolidated)
 
     def set_webapp_loading(self, value: bool):
@@ -70,13 +69,13 @@ class ReactBridge:
         """
         data = {'cmd': cmd.value}
         data.update(kwargs)
-        print(f'<ReactBridge> Self-triggering for cmd: {json.dumps(data)}')
+        print(f'<ReactBridge> Self-triggering for cmd: {cmd.value}')
 
         self.handle_react_data_received(json.dumps(data))
 
     async def a_handle_react_data_received(self, data: dict):
         try:
-            print(f'<ReactBridge> Received cmd {json.dumps(data)}')
+            print(f'<ReactBridge> Received cmd {data.get("cmd")}')
             cmd = data['cmd']
             commandId = data['commandId'] if 'commandId' in data else ''
 
@@ -200,11 +199,12 @@ class ReactBridge:
                 except Exception as e:
                     self.send_cmd(IC.DID_NETWORK_REQUEST, error=str(e), commandId=commandId)
 
-            elif cmd == IC.SET_OPENAI_API_KEY:
-                key = data['key']
+            elif cmd == IC.OPEN_AI_SETTINGS:
+                self.app.guiThreadSignaler.showAISettingsSignal.emit()
+                self.send_cmd(IC.DID_OPEN_AI_SETTINGS, commandId=commandId)
 
-                await self.app.chatAI.set_openai_api_key(key)
-                os.environ['OPENAI_API_KEY'] = key
+            elif cmd == IC.SET_OPENAI_API_KEY:
+                self.app.handle_openai_api_key_save(data['key'])
                 self.send_cmd(IC.DID_SET_OPENAI_API_KEY, commandId=commandId)
 
             elif cmd == IC.EDIT_SETTING:

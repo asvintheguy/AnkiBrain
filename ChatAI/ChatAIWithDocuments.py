@@ -4,7 +4,7 @@ from os import path
 from typing import Optional, Tuple, List
 
 from langchain.chains import ConversationalRetrievalChain
-from langchain.chat_models import ChatOpenAI
+from ProviderLLM import ProviderLLM
 from langchain.document_loaders import TextLoader, PyPDFLoader, Docx2txtLoader, UnstructuredPowerPointLoader, \
     UnstructuredHTMLLoader
 from langchain.embeddings import HuggingFaceEmbeddings
@@ -19,12 +19,6 @@ from ChatInterface import ChatInterface
 def get_file_extension(file_name: str) -> str:
     return path.splitext(file_name)[1]
 
-
-def get_card_gen_chunk_size(model_name: str) -> int:
-    if model_name and model_name.startswith('gpt-5.6'):
-        return 6000
-
-    return 3000
 
 
 def rewrite_json_file(new_data: dict, f):
@@ -65,14 +59,7 @@ class ChatAIWithDocuments(ChatInterface):
 
         self.text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=100, length_function=len)
 
-        temperature = 0
-        model_name = 'gpt-5.6-luna'
-        with open(settings_path, 'r') as f:
-            data = json.load(f)
-            temperature = data['temperature']
-            model_name = data['llmModel']
-
-        self.llm = ChatOpenAI(temperature=temperature, model_name=model_name)
+        self.llm = ProviderLLM()
         self.vectorstore = Chroma(embedding_function=HuggingFaceEmbeddings(), persist_directory=persist_directory)
         self.memory = ConversationBufferMemory(memory_key="chat_history", output_key='answer',
                                                return_messages=True)

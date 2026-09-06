@@ -1,81 +1,159 @@
-# AnkiBrain
+# AnkiBrain — Subscription & API Providers
 
-See [AnkiBrain](https://ankiweb.net/shared/info/1915225457) on AnkiWeb for more information.
+Unofficial fork of [Rosetta Technologies' AnkiBrain](https://github.com/RosettaTechnologies/AnkiBrain)
+([original AnkiWeb listing](https://ankiweb.net/shared/info/1915225457)).
 
-# Local Mode Installation (manual install)
+Local mode supports **ChatGPT through Codex**, **Claude through Claude Code**, and
+**OpenAI-compatible APIs**, including Gemini's eligible free API tier. Models, CLI paths,
+API keys, base URLs, custom headers, timeouts, and request options are configurable.
+See the [provider setup guide](AI_PROVIDERS.md).
 
-## Remarks
-### Linux
-Please notice that this addon doesn't work when Anki is installed as a Flatpak.
-To resolve this, simply install Anki from the official website using the .deb package.
+**Experimental:** provider regression tests, real Qt/LangChain integration checks, the
+webview build, and an actual Codex subscription call have passed. A complete running-Anki
+session and Claude/Gemini account-backed calls have not been tested. This fork still
+inherits upstream's old Python 3.9 dependency stack; compatibility with every current
+Anki/OS version is not guaranteed.
 
-## Installation steps
+## Install in Anki Desktop
 
-1. Open terminal in the AnkiBrain addon root folder (you'll see a `requirements.txt` file)
-2. Install C++ build tools for your OS
+1. Back up your Anki collection and, if already installed, the original add-on's `user_files`.
+   Add-ons run with your user account's filesystem permissions; install only code you trust.
+2. Download **`AnkiBrain-providers.ankiaddon`** from this fork's
+   [GitHub releases](https://github.com/asvintheguy/AnkiBrain/releases).
+   Do **not** use GitHub's “Source code (zip)” as the install file: it lacks the built webview.
+3. In Anki, open **Tools → Add-ons**. Disable the original AnkiBrain if present, then choose
+   **Install from file…** and select the `.ankiaddon` file. Restart Anki.
+   The fork uses the separate folder `ankibrain_providers`; the manifest also declares a
+   conflict with the original AnkiWeb add-on. Do not enable both together.
+4. Choose **Local mode**, not Regular/Server mode. Complete **AnkiBrain → Install…** to set
+   up the existing Python/document dependencies, then restart Anki. If the legacy installer
+   fails, use the manual setup below. The dependency download can require several GB.
+5. For ChatGPT, install the official CLI and sign in on the **same machine/OS account** as Anki:
 
-   1. Windows
-      1. Download: https://visualstudio.microsoft.com/visual-cpp-build-tools/
-      2. Click "Desktop Development with C++" (do not skip this step)
-      3. Install
-   2. MacOS
-      `xcode-select --install`
-   3. Linux
-
+   ```sh
+   npm install -g @openai/codex
+   codex login
+   codex login status
    ```
-    sudo apt install -y git build-essential libssl-dev zlib1g-dev libbz2-dev libreadline-dev libsqlite3-dev curl libncursesw5-dev xz-utils tk-dev libxml2-dev libxmlsec1-dev libffi-dev liblzma-dev
-   ```
 
-3. Setup Python 3.9.13 virtual environment in the root addon directory
+   Choose **Sign in with ChatGPT**, not API-key authentication.
+6. Open **AnkiBrain → AI Provider Settings…**, select **ChatGPT subscription — Codex CLI**,
+   and leave **Model ID** blank to use the CLI default. If the CLI isn't found, paste its full
+   executable path (`command -v codex` on Linux/macOS). Click **Test (uses quota)**, then **Save**.
 
-   1. Install `pyenv` for your operating system
+For Claude, Gemini, local models, or another API endpoint, follow [AI_PROVIDERS.md](AI_PROVIDERS.md).
+No credentials or machine-specific provider configuration are included in the release.
 
-      1. Windows, using powershell (original
-         guide [here](https://github.com/pyenv-win/pyenv-win/blob/master/docs/installation.md#powershell))
+### Manual dependency setup
 
-      ```powershell
-      Invoke-WebRequest -UseBasicParsing -Uri "https://raw.githubusercontent.com/pyenv-win/pyenv-win/master/pyenv-win/install-pyenv-win.ps1" -OutFile "./install-pyenv-win.ps1"; &"./install-pyenv-win.ps1"
-      $env:Path = [System.Environment]::GetEnvironmentVariable('Path', 'Machine')
-      ```
+Use the official native [Anki Desktop distribution](https://apps.ankiweb.net/).
+Flatpak/Snap confinement may prevent launching the external Python/CLI processes;
+those sandboxed installations are not covered by these instructions.
 
-      2. MacOS
+Open **Tools → Add-ons → AnkiBrain — Subscription & API Providers → View Files**.
+Copy that folder's path, then **close Anki** before installing dependencies.
+Install [uv](https://docs.astral.sh/uv/getting-started/installation/) if necessary and
+open a terminal in the add-on folder.
 
-         ```shell
-         # Install homebrew
-         /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+For a **fresh Linux/macOS installation**:
 
-         brew update
-         brew install pyenv
-         echo 'export PYENV_ROOT="$HOME/.pyenv"' >> ~/.zshrc
-         echo 'command -v pyenv >/dev/null || export PATH="$PYENV_ROOT/bin:$PATH"' >> ~/.zshrc
-         echo 'eval "$(pyenv init -)"' >> ~/.zshrc
-         exec "$SHELL"
-         ```
+```sh
+cd "/absolute/path/to/ankibrain_providers"
+uv venv --python 3.9 --seed user_files/venv
+uv pip install --python user_files/venv/bin/python -r linux_requirements.txt
+```
 
-      3. Linux
+For **Windows**, use PowerShell and the Windows requirements:
 
-      ```
-      curl https://pyenv.run | bash
+```powershell
+Set-Location "C:\absolute\path\to\ankibrain_providers"
+uv venv --python 3.9 --seed user_files/venv
+uv pip install --python user_files/venv/Scripts/python.exe -r windows_requirements.txt
+```
 
-      echo 'export PYENV_ROOT="$HOME/.pyenv"' >> ~/.bashrc
-      echo 'command -v pyenv >/dev/null || export PATH="$PYENV_ROOT/bin:$PATH"' >> ~/.bashrc
-      echo 'eval "$(pyenv init -)"' >> ~/.bashrc
-      echo 'export PYENV_ROOT="$HOME/.pyenv"' >> ~/.profile
-      echo 'command -v pyenv >/dev/null || export PATH="$PYENV_ROOT/bin:$PATH"' >> ~/.profile
-      echo 'eval "$(pyenv init -)"' >> ~/.profile
+If `user_files/venv` already exists, skip its creation rather than deleting a working
+installation. Resolve all installation errors before restarting Anki. Compiled packages
+may need C++ build tools: `build-essential` on Debian/Ubuntu, Xcode command-line tools on
+macOS, or Visual Studio's **Desktop development with C++** workload on Windows.
+The old macOS/Windows dependency sets may need platform-specific adjustments and were
+not validated here. Linux dependency resolution was checked with Python 3.9.25.
 
-      . ~/.bashrc
-      . ~/.profile
-      ```
+**The environment must be in `user_files/venv`, not a top-level `venv`.** The upstream
+boot routine deletes a top-level `venv`. Python 3.9 is end-of-life; the newer CLI tools
+run in their own runtimes, but the legacy document engine has not yet been modernized.
 
-   2. `pyenv install 3.9.13`
-   3. `pyenv local 3.9.13`
-   4. `python -m venv venv`
+### Existing AnkiBrain data and updates
 
-4. Activate Python virtual environment
-   1. Windows: `.\venv\Scripts\active`
-   2. MacOS/Linux: `./venv/bin/activate`
-5. Install python dependencies
-   1. `pip install -r requirements.txt`
-   2. Should produce no errors
-6. Addon should be OK to run now
+The fork has a different add-on folder, so installing it does not overwrite the original
+add-on. Keep the original disabled. Already-added Anki cards stay in your collection.
+AnkiBrain's document index/settings do not migrate automatically. Keep a backup and
+re-import documents or carefully migrate only your own data; do not copy another user's
+credentials or copy a Python virtual environment between paths.
+
+Update GitHub installations by installing a newer `.ankiaddon` from this fork's releases.
+Anki preserves the fork's `user_files` directory during add-on replacement, but back it up
+before updating. GitHub-only installs do not receive AnkiWeb automatic updates.
+
+## Build an install file from source
+
+With Git, Python 3.9+, and Node/npm available:
+
+```sh
+git clone https://github.com/asvintheguy/AnkiBrain.git
+cd AnkiBrain
+cd webview
+npm exec --yes --package=yarn@1.22.22 -- yarn install --frozen-lockfile --non-interactive
+npm run build
+cd ..
+python3 tests/test_ai_providers.py
+python3 scripts/build_addon.py
+```
+
+Output: **`dist/AnkiBrain-providers.ankiaddon`**. The packager uses Git-tracked runtime
+source plus the compiled webview, checks the archive and its assets, and excludes private
+settings, keys, documents, virtual environments, Node dependencies, and Python bytecode.
+If developing changes, review and `git add` new source files before packaging them.
+Never create a release by blindly zipping your entire add-on directory.
+
+Optional real Qt/LangChain integration checks with the local dependencies installed:
+
+```sh
+user_files/venv/bin/python tests/test_ai_providers.py --runtime
+```
+
+## Publish this fork on AnkiWeb
+
+GitHub publishing does **not** create an AnkiWeb listing. Publish manually when ready:
+
+1. **Verify redistribution/licensing first.** The upstream GitHub repository contains no
+   project-level `LICENSE`. [AnkiWeb's terms](https://ankiweb.net/account/terms) require
+   shared add-ons to use AGPL3 or a compatible license and assume AGPL3 if no license is
+   stated. Verify the applicable license of the upstream code/version being reused (or
+   obtain permission), retain attribution and third-party notices, and provide the
+   corresponding source. A public GitHub repository alone is not a license grant for
+   arbitrary redistribution. This fork does not invent a new license for upstream code.
+   Review the official CLI vendors' distribution/integration terms too; see the provider guide.
+2. **Test in a separate Anki profile** on the Anki versions and operating systems you plan
+   to advertise. Test first install, document loading/card creation, settings persistence,
+   and updating with existing `user_files`. Do not advertise untested compatibility.
+3. Build the `.ankiaddon` above. Its ZIP root contains `__init__.py` and `manifest.json`,
+   not a containing `AnkiBrain/` directory. Check it contains no API keys or OAuth tokens.
+4. Sign into [AnkiWeb](https://ankiweb.net/), open
+   [Shared Add-ons](https://ankiweb.net/shared/addons/), and select **Upload**.
+5. Create a **new** listing, e.g. **“AnkiBrain — Subscription & API Providers (Unofficial Fork)”**.
+   Upload `dist/AnkiBrain-providers.ankiaddon`. Credit Rosetta Technologies and link both
+   the upstream project and this fork's source/issues/setup guide. Explain the Local mode
+   installation, external CLI requirements, provider billing/quota, and cloud data handling.
+6. Set the supported Anki versions/platforms according to your tests, add screenshots and
+   a changelog, then submit using the site's current review/publication flow. AnkiWeb
+   assigns your fork its **own add-on ID**; do not reuse the original `1915225457` listing.
+7. For later updates, edit your listing and upload the new package. Add your newly assigned
+   numeric ID to this manifest's `conflicts` list if you will also distribute the named
+   `ankibrain_providers` GitHub package, so users do not accidentally run both copies.
+
+AnkiWeb installations use their numeric add-on folder. Moving from the GitHub package to
+AnkiWeb is therefore a separate installation: back up your data, disable the GitHub copy,
+recreate its Python environment in the new folder, and reconfigure/migrate your own data.
+Do not publish your personal `ai_providers.json`, `.env`, CLI authentication caches, or documents.
+
+Reference: [official Anki add-on packaging/sharing guide](https://addon-docs.ankiweb.net/sharing.html).

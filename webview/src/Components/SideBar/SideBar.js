@@ -26,7 +26,6 @@ import { getUser } from "../../api/server-api/networking/user";
 export function SideBar(props) {
   const navigate = useNavigate();
   const user = useSelector((state) => state.user.value);
-  const cost = useSelector((state) => state.cost);
   const userMode = useSelector((state) => state.userMode.value);
   const { colorMode, toggleColorMode } = useColorMode();
   const language = useSelector((state) => state.language.value);
@@ -208,7 +207,7 @@ export function SideBar(props) {
         )}
 
         {userMode === "LOCAL" && (
-          <span className="TopHeader-cost">${cost.session.toFixed(2)}</span>
+          <span className="TopHeader-cost" title="Usage and billing are managed by your selected provider; AnkiBrain does not track these costs.">Provider-billed</span>
         )}
 
         {isLocalMode() && (

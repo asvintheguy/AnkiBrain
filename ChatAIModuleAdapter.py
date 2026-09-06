@@ -7,7 +7,6 @@ from project_paths import python_path, ChatAI_module_dir
 ChatAI_module_init_path = path.join(ChatAI_module_dir, '__init__.py')
 
 from InterprocessCommand import InterprocessCommand as IC
-import json
 from AnkiBrainDocument import AnkiBrainDocument
 from enum import Enum
 
@@ -40,10 +39,10 @@ class ChatAIModuleAdapter:
     async def call(self, cmd: IC, **kwargs) -> CallResponse:
         data = {'cmd': cmd.value}
         data.update(kwargs)
-        print(f'<ChatAIModuleAdapter> Sending cmd to ChatAI module: {json.dumps(data)}')
+        print(f'<ChatAIModuleAdapter> Sending cmd to ChatAI module: {cmd.value}')
 
         out = await self._call_dict(data)
-        print(f'<ChatAIModuleAdapter> Received output from ChatAI module: {json.dumps(out)}')
+        print(f'<ChatAIModuleAdapter> Received output from ChatAI module: {out.get("cmd")}')
 
         return out
 
@@ -98,8 +97,4 @@ class ChatAIModuleAdapter:
 
     async def delete_all_documents(self):
         output = await self.call(IC.DELETE_ALL_DOCUMENTS)
-        return output['data']
-
-    async def set_openai_api_key(self, key):
-        output = await self.call(IC.SET_OPENAI_API_KEY, key=key)
         return output['data']

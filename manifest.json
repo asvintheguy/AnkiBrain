@@ -1,0 +1,5 @@
+{
+  "package": "ankibrain_providers",
+  "name": "AnkiBrain — Subscription & API Providers",
+  "conflicts": ["1915225457"]
+}

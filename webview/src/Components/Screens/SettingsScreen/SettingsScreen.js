@@ -30,6 +30,8 @@ import { isLocalMode } from "../../../api/user";
 import { setDevMode } from "../../../api/redux/slices/devMode";
 import { setupServerAPI } from "../../../api/server-api/networking";
 import { pyEditSetting } from "../../../api/PythonBridge/senders/pyEditSetting";
+import { asendPythonCommand } from "../../../api/PythonBridge";
+import { InterprocessCommand as IC } from "../../../api/PythonBridge/InterprocessCommand";
 import React, { useState } from "react";
 import {
   postPasswordReset,
@@ -55,6 +57,18 @@ const AdvancedSettings = (props) => {
 
   return (
     <Box {...props}>
+      {isLocalMode() ? (
+        <Flex direction={"column"} alignItems={"center"} gap={3}>
+          <Text>Provider: {llm}</Text>
+          <Button onClick={() => asendPythonCommand(IC.OPEN_AI_SETTINGS)}>
+            AI Provider Settings…
+          </Button>
+          <Text fontSize={12} color={"gray"}>
+            Configure subscriptions, models, CLI paths, API endpoints, keys, headers,
+            and request options. Saved changes apply to the next request.
+          </Text>
+        </Flex>
+      ) : (
       <Flex direction={"row"} justifyContent={"center"}>
         <Flex direction={"column"} me={2}>
           <Tag p={3} justifyContent={"center"}>
@@ -118,6 +132,7 @@ const AdvancedSettings = (props) => {
           />
         </Flex>
       </Flex>
+      )}
 
       <Divider />
 

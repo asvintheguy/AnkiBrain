@@ -1,5 +1,6 @@
-VERSION = '1.0.0'
+VERSION = '1.0.0-providers.1'
 
+import os
 import sys
 from os import path
 

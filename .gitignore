@@ -1,9 +1,16 @@
+# Local release artifacts and Python environments
+/dist/
+/venv/
+/user_files/venv/
+
 # Ignore Python cache files
 __pycache__/
 *.pyc
 
 # Ignore specific file
 user_files/settings.json
+user_files/ai_providers.json
+user_files/.ai-providers-*
 
 
 node_modules/

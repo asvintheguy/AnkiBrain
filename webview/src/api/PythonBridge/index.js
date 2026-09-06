@@ -65,6 +65,10 @@ export async function handlePythonDataReceived(
   const data = pyResponseObject.data;
 
   switch (cmd) {
+    case "localAISettingsChanged":
+      dispatch(setLLMModel(data.model));
+      dispatch(setTemperature(data.temperature ?? "Provider default"));
+      break;
     case "explainSelectedText":
       handleExplainSelectedText(pyResponseObject.text, dispatch, navigate);
       break;
